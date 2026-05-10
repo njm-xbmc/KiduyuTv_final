@@ -461,7 +461,16 @@ fun TvShowDetailScreen(
                     item {
                         CrewRow(
                             title = "Writing & Production",
-                            crew = uiState.writingAndProductionCrew
+                            crew = uiState.writingAndProductionCrew,
+                            onCrewClick = { crewMember ->
+                                onCastClick(
+                                    crewMember.id,
+                                    crewMember.name,
+                                    crewMember.job,
+                                    crewMember.profilePath,
+                                    crewMember.department
+                                )
+                            }
                         )
                     }
                 }

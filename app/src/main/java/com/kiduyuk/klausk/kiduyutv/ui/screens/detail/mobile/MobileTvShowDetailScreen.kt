@@ -362,7 +362,17 @@ fun MobileTvShowDetailScreen(
                     if (uiState.writingAndProductionCrew.isNotEmpty()) {
                         CrewRow(
                             title = "Writing & Production",
-                            crew = uiState.writingAndProductionCrew
+                            crew = uiState.writingAndProductionCrew,
+                            onCrewClick = { crewMember ->
+                                val route = Screen.MobileCastDetail.createRoute(
+                                    castId = crewMember.id,
+                                    castName = crewMember.name,
+                                    character = crewMember.job,
+                                    profilePath = crewMember.profilePath,
+                                    knownForDepartment = crewMember.department
+                                )
+                                onNavigateToCastDetail(route)
+                            }
                         )
                     }
 
