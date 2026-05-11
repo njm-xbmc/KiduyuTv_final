@@ -202,7 +202,7 @@ class DetailViewModel : ViewModel() {
      * @param tvId The ID of the TV show.
      * @param totalSeasons The total number of seasons, used as a fallback if API fails.
      */
-    fun loadSeasons(tvId: Int, totalSeasons: Int) {
+    fun loadSeasons(tvId: Int, totalSeasons: Int, loadEpisodesAfter: Boolean = true) {
         viewModelScope.launch {
             Log.i(TAG, "loadSeasons: tvId=$tvId, totalSeasons=$totalSeasons")
             try {
@@ -215,6 +215,11 @@ class DetailViewModel : ViewModel() {
                 if (seasonList.isNotEmpty()) {
                     Log.i(TAG, "loadSeasons: loaded ${seasonList.size} seasons for tvId=$tvId")
                     _uiState.value = _uiState.value.copy(seasons = seasonList)
+                    // Auto-load episodes for season 1 if requested
+                    if (loadEpisodesAfter && seasonList.isNotEmpty()) {
+                        val firstSeason = seasonList.first().seasonNumber
+                        loadSeasonEpisodes(tvId, firstSeason)
+                    }
                 } else {
                     // Fallback: generate seasons from totalSeasons count if API returns empty.
                     Log.i(TAG, "loadSeasons: API returned no seasons, generating $totalSeasons from totalSeasons")
@@ -222,6 +227,10 @@ class DetailViewModel : ViewModel() {
                         Season(id = n, name = "Season $n", seasonNumber = n, posterPath = null, episodeCount = null)
                     }
                     _uiState.value = _uiState.value.copy(seasons = fallbackList)
+                    // Auto-load episodes for season 1 if requested
+                    if (loadEpisodesAfter && fallbackList.isNotEmpty()) {
+                        loadSeasonEpisodes(tvId, 1)
+                    }
                 }
             } catch (e: Exception) {
                 // Fallback: generate seasons from totalSeasons count if API call fails.
@@ -230,6 +239,10 @@ class DetailViewModel : ViewModel() {
                     Season(id = n, name = "Season $n", seasonNumber = n, posterPath = null, episodeCount = null)
                 }
                 _uiState.value = _uiState.value.copy(seasons = fallbackList)
+                // Auto-load episodes for season 1 if requested
+                if (loadEpisodesAfter && fallbackList.isNotEmpty()) {
+                    loadSeasonEpisodes(tvId, 1)
+                }
             }
         }
     }
