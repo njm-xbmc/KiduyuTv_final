@@ -68,9 +68,12 @@ fun SeasonEpisodesScreen(
     var seasonsLoaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(tvShowId) {
+        // Load seasons first - this is async and we need to wait for it
         if (!seasonsLoaded || uiState.seasons.isEmpty()) {
             viewModel.loadSeasons(tvShowId, totalSeasons)
             seasonsLoaded = true
+            // Small delay to allow state update and prevent race condition
+            kotlinx.coroutines.delay(150)
         }
         viewModel.loadSeasonEpisodes(tvShowId, 1)
         viewModel.loadTvShowDetail(context, tvShowId)
