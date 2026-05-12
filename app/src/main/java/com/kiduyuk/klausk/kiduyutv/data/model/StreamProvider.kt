@@ -302,6 +302,47 @@ object StreamProviderManager {
                 if (timestamp > 0) params["startAt"] = timestamp.toString()
                 params
             }
+        ),
+
+        // ═══════════════════════════════════════════════════════════════
+        // 19. VidCore
+        // ═══════════════════════════════════════════════════════════════
+        StreamProvider(
+            name = "VidCore",
+            movieUrlTemplate = "https://vidcore.net/movie/%d",
+            tvUrlTemplate = "https://vidcore.net/tv/%d/%d/%d",
+            movieParameters = { _, _ ->
+                mapOf(
+                    "autoPlay" to "true",
+                    "sub" to "en"
+                )
+            },
+            tvParameters = { _, _, _, _ ->
+                mapOf(
+                    "autoPlay" to "true",
+                    "nextButton" to "true",
+                    "autoNext" to "true"
+                )
+            }
+        ),
+
+        // ═══════════════════════════════════════════════════════════════
+        // 20. EmbedMaster
+        // ═══════════════════════════════════════════════════════════════
+        StreamProvider(
+            name = "EmbedMaster",
+            movieUrlTemplate = "https://embedmaster.link/movie/%d",
+            tvUrlTemplate = "https://embedmaster.link/tv/%d/%d/%d",
+            movieParameters = { _, _ ->
+                mapOf("autoPlay" to "true")
+            },
+            tvParameters = { _, _, _, _ ->
+                mapOf(
+                    "autoPlay" to "true",
+                    "nextButton" to "true",
+                    "autoNext" to "true"
+                )
+            }
         )
     )
 
