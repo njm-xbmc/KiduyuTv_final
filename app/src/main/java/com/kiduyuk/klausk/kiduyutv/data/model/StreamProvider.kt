@@ -255,16 +255,13 @@ object StreamProviderManager {
         StreamProvider(
             name = "2Embed",
             movieUrlTemplate = "https://www.2embed.cc/embed/%d",
-            tvUrlTemplate = "https://www.2embed.cc/embedtv/%s&s=%d&e=%d",
-            movieParameters = { _, _ ->
-                mapOf("autoPlay" to "true")
-            },
-            tvParameters = { tmdbId, _, _, _ ->
-                // Note: TV shows require IMDB ID. tmdbId parameter is passed as string with "tt" prefix
-                // when available. Falls back to tmdbId if IMDB ID not available.
-                val params = mutableMapOf<String, String>()
-                params["autoPlay"] = "true"
-                params
+            tvUrlTemplate = "https://www.2embed.cc/embedtv/%d",
+            movieParameters = { _, _ -> emptyMap() },
+            tvParameters = { _, season, episode, _ ->
+                mapOf(
+                    "s" to season.toString(),
+                    "e" to episode.toString()
+                )
             }
         ),
 
