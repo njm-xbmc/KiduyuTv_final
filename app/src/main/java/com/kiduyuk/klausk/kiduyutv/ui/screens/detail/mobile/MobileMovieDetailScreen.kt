@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.ExperimentalLayoutApi
+import androidx.compose.material3.FlowRow
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -48,6 +50,7 @@ import com.kiduyuk.klausk.kiduyutv.BuildConfig
 import androidx.activity.compose.BackHandler
 import android.app.Activity
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MobileMovieDetailScreen(
     movieId: Int,
