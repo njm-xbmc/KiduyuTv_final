@@ -298,16 +298,16 @@ fun MobileMovieDetailScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(text = "Production Companies", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             movie.productionCompanies.take(3).forEach { company ->
                                 Surface(
                                     shape = RoundedCornerShape(16.dp),
                                     color = CardDark,
                                     modifier = Modifier
-                                        .padding(vertical = 4.dp)
                                         .clickable { onCompanyClick(company.id, company.name) }
                                 ) {
                                     Text(
