@@ -85,7 +85,7 @@
         <activity
             android:name=".ui.screens.trakt.TraktAuthActivity"
             android:exported="false"
-            android:theme="@style/Theme.KiduyuTv" />
+            android:theme="@style/Theme.KiduyuTv.Auth" />
     </application>
 
 </manifest>
