@@ -557,6 +557,7 @@ object NetworkConnectivityChecker {
             // Default to true if we can't determine, let dialog handle the error
             true
         }
+    }
     
     /**
      * Updates the current state and emits to observers if changed.

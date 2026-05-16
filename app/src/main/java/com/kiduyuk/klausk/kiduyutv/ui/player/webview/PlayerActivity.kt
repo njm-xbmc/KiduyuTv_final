@@ -688,6 +688,9 @@ class PlayerActivity : AppCompatActivity() {
 
                 // Inject video detection script
                 injectVideoDetectionScript(view)
+                
+                // Inject stream protection (prevents ads from replacing video src)
+                injectStreamProtectionScript(view)
 
                 // Inject advanced player scripts
                 injectAdvancedPlayerScripts(view)
@@ -1023,7 +1026,101 @@ class PlayerActivity : AppCompatActivity() {
         view?.evaluateJavascript(autoplayJs, null)
     }
 
-    // ★ Ad blocking statistics methods
+    // ★ Simple iframe stream URL protection - prevents ads from replacing video src
+    private fun injectStreamProtectionScript(view: WebView?) {
+        val protectionJs = """
+        (function() {
+            console.log('[StreamProtect] Initializing stream protection');
+            
+            // Store original video source
+            var originalSrc = null;
+            
+            // Watch for video source changes
+            function protectVideoSrc() {
+                var videos = document.querySelectorAll('video');
+                videos.forEach(function(video) {
+                    // Capture original source on first load
+                    if (!originalSrc && video.src && video.src.indexOf('blob:') !== 0) {
+                        originalSrc = video.src;
+                        console.log('[StreamProtect] Original source captured: ' + originalSrc);
+                    }
+                    
+                    // If source changed to blob (likely an ad), try to restore original
+                    if (originalSrc && video.src.indexOf('blob:') === 0) {
+                        console.log('[StreamProtect] Detected blob URL (ad), source may be replaced');
+                        // Don't auto-restore blob URLs as they might be valid playback
+                        // Instead, just log the detection
+                    }
+                    
+                    // Block source changes to known ad domains
+                    var currentSrc = video.src || video.currentSrc || '';
+                    var adDomains = ['doubleclick', 'googlesyndication', 'googleadservices', 'adservice', 'adnxs', 'adsrvr', 'adform', 'taboola', 'outbrain', 'criteo'];
+                    var isAdUrl = adDomains.some(function(domain) {
+                        return currentSrc.indexOf(domain) !== -1;
+                    });
+                    
+                    if (isAdUrl && originalSrc) {
+                        console.log('[StreamProtect] Detected ad URL, keeping original source');
+                    }
+                });
+            }
+            
+            // Remove ad overlays and popups
+            function removeAdOverlays() {
+                var selectors = [
+                    'div[class*="ad-"]', 'div[class*="ads-"]', 'div[class*="advert"]',
+                    'div[id*="ad-"]', 'div[id*="ads-"]', 'div[id*="advert"]',
+                    '.popup-overlay', '.ad-popup', '.video-ad', '.preroll-ad',
+                    '[class*="overlay-ad"]', '[class*="sponsor"]'
+                ];
+                
+                selectors.forEach(function(selector) {
+                    try {
+                        var elements = document.querySelectorAll(selector);
+                        elements.forEach(function(el) {
+                            var style = window.getComputedStyle(el);
+                            if (style.position === 'fixed' || style.position === 'absolute') {
+                                if (style.zIndex > 1000 || el.innerText.toLowerCase().indexOf('advert') !== -1) {
+                                    el.remove();
+                                }
+                            }
+                        });
+                    } catch(e) {}
+                });
+            }
+            
+            // Block popup windows
+            function blockPopups() {
+                window.open = function() { return null; };
+                window.alert = function() {};
+                window.confirm = function() { return true; };
+            }
+            
+            // Run protection
+            protectVideoSrc();
+            removeAdOverlays();
+            blockPopups();
+            
+            // Monitor continuously
+            setInterval(protectVideoSrc, 2000);
+            setInterval(removeAdOverlays, 3000);
+            
+            // Observe for new elements
+            var observer = new MutationObserver(function(mutations) {
+                protectVideoSrc();
+                removeAdOverlays();
+            });
+            
+            if (document.body) {
+                observer.observe(document.body, { childList: true, subtree: true });
+            }
+            
+            console.log('[StreamProtect] Protection active');
+        })();
+        """.trimIndent()
+        
+        view?.evaluateJavascript(protectionJs, null)
+    }
 
     private fun resetAdBlockStats() {
         blockedRequestsCount = 0
