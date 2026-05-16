@@ -343,7 +343,7 @@ fun MobileSettingsScreen(
                         // Handle sign out from Trakt
                         kotlinx.coroutines.GlobalScope.launch {
                             com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository(
-                                com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.getInstance(),
+                                com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.apiService,
                                 com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
                             ).signOut()
                         }

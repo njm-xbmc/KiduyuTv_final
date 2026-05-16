@@ -1,7 +1,7 @@
 package com.kiduyuk.klausk.kiduyutv.data.repository
 
 import com.kiduyuk.klausk.kiduyutv.data.model.trakt.*
-import com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient
+import com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiService
 import com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -14,7 +14,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class TraktRepository @Inject constructor(
-    private val traktApiClient: TraktApiClient,
+    private val traktApiService: TraktApiService,
     private val traktAuthManager: TraktAuthManager
 ) {
 
@@ -29,7 +29,7 @@ class TraktRepository @Inject constructor(
                 return@flow
             }
 
-            val response = traktApiClient.apiService.getSettings("Bearer $token")
+            val response = traktApiService.getSettings("Bearer $token")
             if (response.isSuccessful && response.body() != null) {
                 emit(Result.success(response.body()!!))
             } else {
@@ -51,7 +51,7 @@ class TraktRepository @Inject constructor(
                 return@flow
             }
 
-            val response = traktApiClient.apiService.getWatchedHistory(
+            val response = traktApiService.getWatchedHistory(
                 token = "Bearer $token",
                 type = null,
                 page = page,
@@ -78,7 +78,7 @@ class TraktRepository @Inject constructor(
                 return@flow
             }
 
-            val response = traktApiClient.apiService.getCollection("Bearer $token", type)
+            val response = traktApiService.getCollection("Bearer $token", type)
             if (response.isSuccessful && response.body() != null) {
                 emit(Result.success(response.body()!!))
             } else {
@@ -100,7 +100,7 @@ class TraktRepository @Inject constructor(
                 return@flow
             }
 
-            val response = traktApiClient.apiService.getWatchlist(
+            val response = traktApiService.getWatchlist(
                 token = "Bearer $token",
                 type = type
             )
@@ -125,7 +125,7 @@ class TraktRepository @Inject constructor(
                 return@flow
             }
 
-            val response = traktApiClient.apiService.getRecommendations("Bearer $token", type)
+            val response = traktApiService.getRecommendations("Bearer $token", type)
             if (response.isSuccessful && response.body() != null) {
                 emit(Result.success(response.body()!!))
             } else {
@@ -148,9 +148,9 @@ class TraktRepository @Inject constructor(
             val token = traktAuthManager.getValidAccessToken()
                 ?: return Result.failure(Exception("Not authenticated with Trakt.tv"))
 
-            val response = traktApiClient.apiService.scrobbleMovie(
+            val response = traktApiService.scrobbleMovie(
                 token = "Bearer $token",
-                scrobbleRequest = TraktScrobbleRequest(
+                scrobble = TraktScrobbleRequest(
                     movie = TraktScrobbleMovie(ids = TraktIds(trakt = traktId, slug = "", imdb = null, tmdb = null, tvdb = null)),
                     episode = null,
                     progress = progress.toDouble(),
@@ -182,9 +182,9 @@ class TraktRepository @Inject constructor(
             val token = traktAuthManager.getValidAccessToken()
                 ?: return Result.failure(Exception("Not authenticated with Trakt.tv"))
 
-            val response = traktApiClient.apiService.scrobbleEpisode(
+            val response = traktApiService.scrobbleEpisode(
                 token = "Bearer $token",
-                scrobbleRequest = TraktScrobbleRequest(
+                scrobble = TraktScrobbleRequest(
                     movie = null,
                     episode = TraktScrobbleEpisode(
                         ids = TraktIds(trakt = traktId, slug = "", imdb = null, tmdb = null, tvdb = null),
@@ -214,7 +214,7 @@ class TraktRepository @Inject constructor(
             val token = traktAuthManager.getValidAccessToken()
                 ?: return Result.failure(Exception("Not authenticated with Trakt.tv"))
 
-            val response = traktApiClient.apiService.addToWatchlist(
+            val response = traktApiService.addToWatchlist(
                 token = "Bearer $token",
                 items = TraktSyncItems(
                     movies = listOf(TraktSyncMovie(ids = TraktIds(trakt = traktId, slug = "", imdb = null, tmdb = null, tvdb = null))),
@@ -241,7 +241,7 @@ class TraktRepository @Inject constructor(
             val token = traktAuthManager.getValidAccessToken()
                 ?: return Result.failure(Exception("Not authenticated with Trakt.tv"))
 
-            val response = traktApiClient.apiService.removeFromWatchlist(
+            val response = traktApiService.removeFromWatchlist(
                 token = "Bearer $token",
                 items = TraktSyncItems(
                     movies = listOf(TraktSyncMovie(ids = TraktIds(trakt = traktId, slug = "", imdb = null, tmdb = null, tvdb = null))),

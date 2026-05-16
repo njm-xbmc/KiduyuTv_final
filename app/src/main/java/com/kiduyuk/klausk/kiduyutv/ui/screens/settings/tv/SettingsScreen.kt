@@ -381,7 +381,7 @@ fun SettingsScreen(
                         onSignOutClick = {
                             kotlinx.coroutines.GlobalScope.launch {
                                 val repository = com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository(
-                                    com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.getInstance(),
+                                    com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.apiService,
                                     com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
                                 )
                                 repository.signOut()
