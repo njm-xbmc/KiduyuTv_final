@@ -523,13 +523,40 @@ object NetworkConnectivityChecker {
                 val isReachable = testInternetReachability()
                 if (isReachable && (isCustomDns || isVpn || isProxy)) {
                     withContext(Dispatchers.Main) {
-                        Log.i(TAG, "DNS/VPN/Proxy detected, showing warning dialog")
-                        NetworkStateDialog.showDnsVpnDetectedDialog(AndroidApp.instance, diagnostics)
+                        // Only show dialog if app is in foreground
+                        if (isAppInForeground()) {
+                            try {
+                                Log.i(TAG, "DNS/VPN/Proxy detected, showing warning dialog")
+                                NetworkStateDialog.showDnsVpnDetectedDialog(AndroidApp.instance, diagnostics)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Error showing DNS/VPN dialog: ${e.message}")
+                            }
+                        } else {
+                            Log.i(TAG, "App in background, skipping DNS/VPN dialog")
+                        }
                     }
                 }
             }
         }
     }
+    
+    /**
+     * Check if app is in foreground
+     */
+    private fun isAppInForeground(): Boolean {
+        return try {
+            val activityManager = AndroidApp.instance.getSystemService(Context.ACTIVITY_SERVICE) 
+                as android.app.ActivityManager
+            val processes = activityManager.runningAppProcesses
+            val appProcess = processes?.find { 
+                it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE ||
+                it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+            }
+            appProcess != null
+        } catch (e: Exception) {
+            // Default to true if we can't determine, let dialog handle the error
+            true
+        }
     
     /**
      * Updates the current state and emits to observers if changed.
