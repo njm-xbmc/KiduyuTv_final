@@ -80,6 +80,9 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import com.kiduyuk.klausk.kiduyutv.ui.screens.trakt.TraktAuthActivity
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Root Screen
@@ -366,6 +369,24 @@ fun SettingsScreen(
                         onRefreshWhatsNewClick = { viewModel.refreshWhatsNew() },
                         onCheckForUpdatesClick = { viewModel.checkForUpdates(context) },
                         onDownloadUpdateClick = { viewModel.downloadAndInstallUpdate(context) }
+                    )
+                }
+                SettingsSection.TRAKT -> {
+                    TraktContent(
+                        context = context,
+                        onSignInClick = {
+                            val intent = Intent(context, TraktAuthActivity::class.java)
+                            context.startActivity(intent)
+                        },
+                        onSignOutClick = {
+                            kotlinx.coroutines.GlobalScope.launch {
+                                val repository = com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository(
+                                    com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.getInstance(),
+                                    com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
+                                )
+                                repository.signOut()
+                            }
+                        }
                     )
                 }
             }
@@ -1355,7 +1376,8 @@ private enum class SettingsSection(val title: String) {
     PLAYBACK("Playback"),
     ADS_SETTINGS("Ads Settings"),
     APP_INFORMATION("App Information"),
-    APP_VERSION("App Version")
+    APP_VERSION("App Version"),
+    TRAKT("Trakt.tv")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2131,6 +2153,153 @@ private fun PhoneLoginCodeDialog(
                         color = TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trakt.tv Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Content for the Trakt.tv section.
+ * Handles connection status, sign in, and sign out.
+ */
+@Composable
+private fun TraktContent(
+    context: Context,
+    onSignInClick: () -> Unit,
+    onSignOutClick: () -> Unit
+) {
+    var isConnected by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf<String?>(null) }
+
+    // Check connection status on composition
+    LaunchedEffect(Unit) {
+        val authManager = com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
+        username = authManager.getUsername()
+        isConnected = authManager.getValidAccessToken() != null
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.Top
+    ) {
+        Text(
+            text = "Trakt.tv",
+            color = TextPrimary,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(CardDark)
+                .padding(24.dp)
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header with icon and status
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isConnected) Color(0xFF1B5E20) else SurfaceDark),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = if (isConnected) Color(0xFF4CAF50) else TextSecondary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = if (isConnected) "Connected" else "Not Connected",
+                            color = TextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (isConnected && username != null) {
+                            Text(
+                                text = "Username: $username",
+                                color = TextSecondary,
+                                fontSize = 14.sp
+                            )
+                        } else {
+                            Text(
+                                text = "Sign in to sync your watch history",
+                                color = TextSecondary,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(
+                    color = TextTertiary.copy(alpha = 0.2f),
+                    thickness = 1.dp
+                )
+
+                // Description
+                Text(
+                    text = "Trakt.tv automatically syncs your watched movies and shows across all your devices. " +
+                            "Your watch history, watchlist, and collection will be kept up to date.",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Sign in/out button
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isConnected) Color(0xFFB71C1C) else PrimaryRed)
+                        .clickable {
+                            if (isConnected) {
+                                QuitDialog(
+                                    context = context,
+                                    title = "Disconnect Trakt.tv?",
+                                    message = "Are you sure you want to disconnect your Trakt.tv account?",
+                                    positiveButtonText = "Disconnect",
+                                    negativeButtonText = "Cancel",
+                                    lottieAnimRes = R.raw.exit,
+                                    onNo = {},
+                                    onYes = { onSignOutClick() }
+                                ).show()
+                            } else {
+                                onSignInClick()
+                            }
+                        }
+                        .focusable(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isConnected) "Disconnect" else "Connect with Trakt.tv",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }

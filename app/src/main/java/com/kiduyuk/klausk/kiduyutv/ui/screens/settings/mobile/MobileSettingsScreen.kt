@@ -40,17 +40,21 @@ import coil.transform.CircleCropTransformation
 import com.kiduyuk.klausk.kiduyutv.BuildConfig
 import com.kiduyuk.klausk.kiduyutv.R
 import com.kiduyuk.klausk.kiduyutv.data.repository.MyListManager
+import com.kiduyuk.klausk.kiduyutv.ui.screens.trakt.TraktAuthActivity
 import com.kiduyuk.klausk.kiduyutv.ui.theme.*
 import com.kiduyuk.klausk.kiduyutv.util.AuthManager
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
 import com.kiduyuk.klausk.kiduyutv.util.AdManager
 import com.kiduyuk.klausk.kiduyutv.util.SettingsManager
+import com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SettingsViewModel
 import com.android.volley.Request
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
 import com.google.firebase.auth.FirebaseAuth
 import org.json.JSONObject
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -321,6 +325,30 @@ fun MobileSettingsScreen(
                         }
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── Trakt.tv Section ─────────────────────────────────────────────────
+            SettingsGroup(title = "Trakt.tv") {
+                TraktSettingsItem(
+                    context = context,
+                    onSignedIn = { username -> "Connected as $username" },
+                    onSignedOut = { "Not connected - tap to sign in" },
+                    onSignIn = {
+                        val intent = Intent(context, TraktAuthActivity::class.java)
+                        context.startActivity(intent)
+                    },
+                    onSignOut = {
+                        // Handle sign out from Trakt
+                        kotlinx.coroutines.GlobalScope.launch {
+                            com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository(
+                                com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.getInstance(),
+                                com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
+                            ).signOut()
+                        }
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -1026,6 +1054,88 @@ private fun SettingsItem(
                     .padding(bottom = 16.dp),
                 color = PrimaryRed,
                 trackColor = SurfaceDark,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TraktSettingsItem(
+    context: android.content.Context,
+    onSignedIn: @Composable (String) -> String,
+    onSignedOut: @Composable () -> String,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    var isConnected by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf<String?>(null) }
+
+    // Check connection status on composition
+    LaunchedEffect(Unit) {
+        val authManager = TraktAuthManager.getInstance(context)
+        username = authManager.getUsername()
+        isConnected = authManager.getValidAccessToken() != null
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                if (isConnected) {
+                    QuitDialog(
+                        context = context,
+                        title = "Disconnect Trakt.tv?",
+                        message = "Are you sure you want to disconnect your Trakt.tv account?",
+                        positiveButtonText = "Disconnect",
+                        negativeButtonText = "Cancel",
+                        lottieAnimRes = R.raw.exit,
+                        onNo = {},
+                        onYes = { onSignOut() }
+                    ).show()
+                } else {
+                    onSignIn()
+                }
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(SurfaceDark),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Sync,
+                    contentDescription = null,
+                    tint = if (isConnected) Color(0xFF4CAF50) else TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Trakt.tv",
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    if (isConnected && username != null) "Connected as $username" else "Not connected - tap to sign in",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
