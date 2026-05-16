@@ -45,7 +45,7 @@ object NetworkStateDialog {
     /**
      * Shows or updates the dialog based on network state.
      * Automatically dismisses if connected.
-     *
+     * 
      * @param context Context for creating dialog
      * @param state Current network state
      * @param onRetry Optional callback for retry action
@@ -81,6 +81,157 @@ object NetworkStateDialog {
                 dismiss()
             }
         }
+    }
+    
+    /**
+     * Shows a dialog when custom DNS or VPN is detected.
+     * Provides options to exit the app or open relevant settings.
+     * 
+     * @param context Context for creating dialog
+     * @param diagnostics Network diagnostics containing DNS/VPN info
+     */
+    fun showDnsVpnDetectedDialog(
+        context: Context,
+        diagnostics: NetworkConnectivityChecker.NetworkDiagnostics
+    ) {
+        // Don't recreate if already showing
+        if (currentDialog?.isShowing == true) {
+            return
+        }
+        
+        currentDialog?.dismiss()
+        
+        val builder = AlertDialog.Builder(context)
+        builder.setCancelable(false)
+        
+        // Build message based on what's detected
+        val issues = mutableListOf<String>()
+        
+        if (diagnostics.isVpnActive) {
+            diagnostics.vpnInterfaceName?.let {
+                issues.add("• VPN is active ($it)")
+            } ?: issues.add("• VPN is active")
+        }
+        
+        if (diagnostics.isUsingCustomDns) {
+            issues.add("• Custom DNS detected: ${diagnostics.dnsServers.joinToString(", ")}")
+        }
+        
+        if (diagnostics.isBehindProxy) {
+            issues.add("• Proxy detected: ${diagnostics.proxyHost}")
+        }
+        
+        // Set title and message
+        val title = when {
+            diagnostics.isVpnActive && diagnostics.isUsingCustomDns -> "VPN & Custom DNS Detected"
+            diagnostics.isVpnActive -> "VPN Detected"
+            diagnostics.isUsingCustomDns -> "Custom DNS Detected"
+            diagnostics.isBehindProxy -> "Proxy Detected"
+            else -> "Network Issue Detected"
+        }
+        
+        builder.setTitle(title)
+        builder.setMessage(
+            "We detected the following network configuration that may affect streaming:\n\n" +
+            issues.joinToString("\n") +
+            "\n\nThis may cause issues with video streaming services.\n\n" +
+            "Would you like to:\n" +
+            "• Disable VPN or change DNS settings\n" +
+            "• Exit the app\n" +
+            "• Continue anyway"
+        )
+        
+        // Add buttons based on what's detected
+        val buttonActions = mutableListOf<Pair<String, () -> Unit>>()
+        
+        // VPN settings option
+        if (diagnostics.isVpnActive) {
+            buttonActions.add(Pair("Open VPN Settings") {
+                openVpnSettings(context)
+            })
+        }
+        
+        // DNS settings option
+        if (diagnostics.isUsingCustomDns) {
+            buttonActions.add(Pair("Open DNS Settings") {
+                openDnsSettings(context)
+            })
+        }
+        
+        // Add "Continue Anyway" button
+        buttonActions.add(Pair("Continue Anyway") {
+            dismiss()
+        })
+        
+        // Add "Exit App" button
+        buttonActions.add(Pair("Exit App") {
+            closeApp(context)
+        })
+        
+        // Set buttons based on count (AlertDialog only supports 3 buttons max)
+        // Prioritize: Settings options > Continue > Exit
+        when (buttonActions.size) {
+            4 -> {
+                // VPN + DNS + Proxy detected - use only positive and negative buttons
+                builder.setPositiveButton(buttonActions[0].first) { _, _ -> buttonActions[0].second() }
+                builder.setNegativeButton(buttonActions[2].first) { _, _ -> buttonActions[2].second() }
+                // Add custom buttons via custom view or use neutral for third option
+                builder.setNeutralButton(buttonActions[3].first) { _, _ -> buttonActions[3].second() }
+            }
+            3 -> {
+                builder.setPositiveButton(buttonActions[0].first) { _, _ -> buttonActions[0].second() }
+                builder.setNegativeButton(buttonActions[1].first) { _, _ -> buttonActions[1].second() }
+                builder.setNeutralButton(buttonActions[2].first) { _, _ -> buttonActions[2].second() }
+            }
+            2 -> {
+                builder.setPositiveButton(buttonActions[0].first) { _, _ -> buttonActions[0].second() }
+                builder.setNegativeButton(buttonActions[1].first) { _, _ -> buttonActions[1].second() }
+            }
+            else -> {
+                builder.setPositiveButton("Exit App") { _, _ -> closeApp(context) }
+                builder.setNegativeButton("Continue Anyway") { _, _ -> dismiss() }
+            }
+        }
+        
+        currentDialog = builder.show()
+    }
+    
+    /**
+     * Opens VPN settings.
+     */
+    private fun openVpnSettings(context: Context) {
+        try {
+            val intent = Intent(Settings.ACTION_VPN_SETTINGS)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback to general VPN settings
+            try {
+                val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                context.startActivity(intent)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Could not open VPN settings: ${e2.message}")
+            }
+        }
+        dismiss()
+    }
+    
+    /**
+     * Opens DNS settings (Wireless settings as fallback).
+     */
+    private fun openDnsSettings(context: Context) {
+        try {
+            // Try to open private DNS settings on Android 9+
+            val intent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                context.startActivity(intent)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Could not open DNS settings: ${e2.message}")
+            }
+        }
+        dismiss()
     }
 
     /**
