@@ -301,6 +301,25 @@ fun SettingsScreen(
                     )
                 }
 
+                SettingsSection.TRAKT -> {
+                    TraktContent(
+                        context = context,
+                        onSignInClick = {
+                            val intent = Intent(context, TraktAuthActivity::class.java)
+                            context.startActivity(intent)
+                        },
+                        onSignOutClick = {
+                            kotlinx.coroutines.GlobalScope.launch {
+                                val repository = com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository(
+                                    com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.apiService,
+                                    com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
+                                )
+                                repository.signOut()
+                            }
+                        }
+                    )
+                }
+
                 SettingsSection.PLAYBACK -> {
                     PlaybackContent(
                         defaultProvider = uiState.defaultProvider,
@@ -369,24 +388,6 @@ fun SettingsScreen(
                         onRefreshWhatsNewClick = { viewModel.refreshWhatsNew() },
                         onCheckForUpdatesClick = { viewModel.checkForUpdates(context) },
                         onDownloadUpdateClick = { viewModel.downloadAndInstallUpdate(context) }
-                    )
-                }
-                SettingsSection.TRAKT -> {
-                    TraktContent(
-                        context = context,
-                        onSignInClick = {
-                            val intent = Intent(context, TraktAuthActivity::class.java)
-                            context.startActivity(intent)
-                        },
-                        onSignOutClick = {
-                            kotlinx.coroutines.GlobalScope.launch {
-                                val repository = com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository(
-                                    com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient.apiService,
-                                    com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
-                                )
-                                repository.signOut()
-                            }
-                        }
                     )
                 }
             }
@@ -1373,11 +1374,11 @@ private fun SettingsActionCard(
 private enum class SettingsSection(val title: String) {
     ACCOUNT("Account"),
     APP_SETTINGS("App Settings"),
+    TRAKT("Trakt.tv"),
     PLAYBACK("Playback"),
     ADS_SETTINGS("Ads Settings"),
     APP_INFORMATION("App Information"),
-    APP_VERSION("App Version"),
-    TRAKT("Trakt.tv")
+    APP_VERSION("App Version")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
