@@ -658,7 +658,6 @@ class PlayerActivity : AppCompatActivity() {
 
                 try {
                     video.autoplay = true;
-                    video.controls = true;
                     video.playsInline = true;
                     video.volume = 1.0;
 
