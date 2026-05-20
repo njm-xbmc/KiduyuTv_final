@@ -22,7 +22,7 @@ import com.kiduyuk.klausk.kiduyutv.util.SettingsManager
 import com.kiduyuk.klausk.kiduyutv.util.AuthManager
 
 /**
- * Custom Application class for KiduyuTv.
+ * A Custom Application class for KiduyuTv.
  * This class handles app-wide initializations and provides a centralized
  * configuration for the Coil image loader.
  */
