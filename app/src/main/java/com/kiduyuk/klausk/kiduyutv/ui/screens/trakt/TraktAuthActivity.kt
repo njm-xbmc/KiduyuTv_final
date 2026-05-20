@@ -122,6 +122,8 @@ class TraktAuthActivity : AppCompatActivity() {
             val response = TraktAuthManager.getHttpClient().newCall(request).execute()
             val responseBody = response.body?.string()
 
+            android.util.Log.d("TraktAuthActivity", "Device code response: ${response.code} body: $responseBody")
+
             if (response.isSuccessful && responseBody != null) {
                 val json = JSONObject(responseBody)
                 deviceCode = json.getString("device_code")
@@ -138,6 +140,7 @@ class TraktAuthActivity : AppCompatActivity() {
 
                 true
             } else {
+                android.util.Log.e("TraktAuthActivity", "Failed to get device code. HTTP: ${response.code}, Body: $responseBody")
                 false
             }
         } catch (e: Exception) {
