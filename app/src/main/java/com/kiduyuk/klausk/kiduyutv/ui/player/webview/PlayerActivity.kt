@@ -141,8 +141,6 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-
-
     // ── Cursor hide timer ──────────────────────────────────────────────────────
     private val cursorHideHandler = Handler(Looper.getMainLooper())
     private val cursorHideRunnable = Runnable {
@@ -353,7 +351,7 @@ class PlayerActivity : AppCompatActivity() {
                     isPageLoading = false
                     Log.i(TAG, "[WebView] Page finished loading with AdBlocker")
                     injectVideoDetectionScript(this)
-                    // injectAdvancedPlayerScripts(this)
+                    injectAdvancedPlayerScripts(this)
                     injectAutoplayScript(this)
                 },
                 onError = {
@@ -466,25 +464,103 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * ★ Inject advanced player scripts
+     * ★ Inject advanced player scripts with enhanced ad blocking
      */
     private fun injectAdvancedPlayerScripts(view: WebView?) {
         val advancedJs = """
         (function() {
             function removeAdsAdvanced() {
-                const elements = document.querySelectorAll('*');
-                elements.forEach(el => {
-                    const text = (el.innerText || '').toLowerCase();
-                    const cls = (el.className || '').toString().toLowerCase();
-                    const id = (el.id || '').toLowerCase();
-                    if (
-                        text.includes('advert') || text.includes('sponsored') ||
-                        cls.includes('ad') || cls.includes('popup') ||
-                        id.includes('ad') || id.includes('popup')
-                    ) {
-                        el.remove();
+                function killPopups() {
+                    // 1. Auto-click close/dismiss buttons
+                    var closeSelectors = [
+                        '[class*="close"]', '[id*="close"]',
+                        '[class*="dismiss"]', '[aria-label="Close"]',
+                        'button[class*="cancel"]', '.modal-close',
+                        '[data-dismiss="modal"]'
+                    ];
+                    closeSelectors.forEach(function(sel) {
+                        document.querySelectorAll(sel).forEach(function(btn) {
+                            try { btn.click(); } catch(e) {}
+                        });
+                    });
+
+                    // 2. Remove high z-index fixed/absolute overlays that aren't the video
+                    document.querySelectorAll('div, section, aside').forEach(function(el) {
+                        try {
+                            var style = window.getComputedStyle(el);
+                            var zIndex = parseInt(style.zIndex) || 0;
+                            var pos = style.position;
+                            if (
+                                (pos === 'fixed' || pos === 'absolute') &&
+                                zIndex > 100 &&
+                                el.offsetWidth > 200 &&
+                                el.offsetHeight > 100 &&
+                                !el.querySelector('video') &&
+                                !el.contains(document.querySelector('video'))
+                            ) {
+                                el.remove();
+                            }
+                        } catch(e) {}
+                    });
+
+                    // 3. Remove elements by keyword matching (your original logic, kept intact)
+                    const elements = document.querySelectorAll('*');
+                    elements.forEach(el => {
+                        const text = (el.innerText || '').toLowerCase();
+                        const cls = (el.className || '').toString().toLowerCase();
+                        const id = (el.id || '').toLowerCase();
+                        if (
+                            text.includes('advert') || text.includes('sponsored') ||
+                            cls.includes('ad') || cls.includes('popup') ||
+                            id.includes('ad') || id.includes('popup')
+                        ) {
+                            el.remove();
+                        }
+                    });
+
+                    // 4. Restore body scroll in case a popup locked it
+                    document.body.style.overflow = 'auto';
+                    document.documentElement.style.overflow = 'auto';
+                }
+
+                // Inject CSS to hide common overlay patterns
+                var style = document.createElement('style');
+                style.innerHTML = `
+                    [class*="overlay"],[id*="overlay"],
+                    [class*="modal"],[id*="modal"],
+                    [class*="popup"],[id*="popup"],
+                    [class*="dialog"],[id*="dialog"],
+                    [class*="interstitial"],[id*="interstitial"],
+                    div[style*="position: fixed"],
+                    div[style*="position:fixed"] {
+                        display: none !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
                     }
+                    body { overflow: auto !important; }
+                `;
+                document.head && document.head.appendChild(style);
+
+                // Run immediately
+                killPopups();
+
+                // MutationObserver to catch dynamically injected popups
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(m) {
+                        if (m.addedNodes.length > 0) {
+                            setTimeout(killPopups, 300);
+                        }
+                    });
                 });
+                observer.observe(document.body, { childList: true, subtree: true });
+
+                // Periodic sweep as fallback
+                setInterval(killPopups, 3000);
+
+                // Block JS dialog-based popups
+                window.alert   = function() { return undefined; };
+                window.confirm = function() { return true; };
+                window.prompt  = function() { return ''; };
             }
 
             function blockRedirects() {

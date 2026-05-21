@@ -255,14 +255,9 @@ object StreamProviderManager {
         StreamProvider(
             name = "2Embed",
             movieUrlTemplate = "https://www.2embed.cc/embed/%d",
-            tvUrlTemplate = "https://www.2embed.cc/embedtv/%d",
+            tvUrlTemplate = "https://www.2embed.cc/embedtv/%d&s=%d&e=%d",
             movieParameters = { _, _ -> emptyMap() },
-            tvParameters = { _, season, episode, _ ->
-                mapOf(
-                    "s" to season.toString(),
-                    "e" to episode.toString()
-                )
-            }
+            tvParameters = { _, _, _, _ -> emptyMap() }
         ),
 
         // ═══════════════════════════════════════════════════════════════
