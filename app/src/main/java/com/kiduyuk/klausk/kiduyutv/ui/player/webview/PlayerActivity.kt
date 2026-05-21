@@ -503,7 +503,7 @@ class PlayerActivity : AppCompatActivity() {
                         } catch(e) {}
                     });
 
-                    // 3. Remove elements by keyword matching (your original logic, kept intact)
+                    // 3. Remove elements by keyword matching
                     const elements = document.querySelectorAll('*');
                     elements.forEach(el => {
                         const text = (el.innerText || '').toLowerCase();
@@ -663,34 +663,83 @@ class PlayerActivity : AppCompatActivity() {
                 }
 
                 function enforceVolume(video) {
-                    video.volume = 1.0;
-                    video.muted = false;
-                    video.addEventListener('volumechange', function() {
-                        if (video.volume < 1.0 || video.muted) {
-                            video.volume = 1.0;
-                            video.muted = false;
+                    // Force unmute using both attribute and property methods
+                    try {
+                        // Remove muted attribute if it exists
+                        if (video.hasAttribute('muted')) {
+                            video.removeAttribute('muted');
                         }
-                    });
+                        // Set muted attribute to false
+                        video.setAttribute('muted', 'false');
+                        
+                        // Set volume to max
+                        video.volume = 1.0;
+                        
+                        // Ensure muted property is false
+                        video.muted = false;
+                        
+                        // Try to play if paused
+                        if (video.paused) {
+                            video.play().catch(function(e) {
+                                console.log('[Volume] Could not auto-play: ' + e);
+                            });
+                        }
+                        
+                        // Block volume change events that might re-mute
+                        video.addEventListener('volumechange', function() {
+                            if (video.volume < 1.0 || video.muted) {
+                                if (video.hasAttribute('muted')) {
+                                    video.removeAttribute('muted');
+                                }
+                                video.setAttribute('muted', 'false');
+                                video.volume = 1.0;
+                                video.muted = false;
+                                console.log('[Volume] Forced unmute and max volume');
+                            }
+                        });
+                        
+                        console.log('[Volume] Successfully enforced volume');
+                    } catch(e) {
+                        console.log('[Volume] Error enforcing volume: ' + e);
+                    }
                 }
 
                 function setMaxVolume() {
                     var videos = document.getElementsByTagName('video');
                     for (var i = 0; i < videos.length; i++) {
-                        videos[i].volume = 1.0;
-                        videos[i].muted = false;
+                        enforceVolume(videos[i]);
+                    }
+                    
+                    // Also check for video in iframes
+                    var iframes = document.querySelectorAll('iframe');
+                    for (var j = 0; j < iframes.length; j++) {
+                        try {
+                            var iframeVideos = iframes[j].contentDocument?.querySelectorAll('video');
+                            if (iframeVideos) {
+                                for (var k = 0; k < iframeVideos.length; k++) {
+                                    enforceVolume(iframeVideos[k]);
+                                }
+                            }
+                        } catch(e) {}
                     }
                 }
-                // Run setMaxVolume 3 times at 3 second intervals
+                
+                // Run setMaxVolume multiple times to catch videos that load later
                 setMaxVolume();
-                setTimeout(setMaxVolume, 3000);
-                setTimeout(setMaxVolume, 6000);
+                setTimeout(setMaxVolume, 2000);
+                setTimeout(setMaxVolume, 5000);
+                setTimeout(setMaxVolume, 10000);
 
                 function monitorVideoEvents() {
                     const videos = document.querySelectorAll('video');
                     videos.forEach(video => {
                         if (video._monitored) return;
                         video._monitored = true;
-                        video.addEventListener('loadedmetadata', () => sendVideoProgress());
+                        enforceVolume(video);
+                        video.addEventListener('loadedmetadata', () => {
+                            sendVideoProgress();
+                            enforceVolume(video);
+                        });
                         video.addEventListener('ended', () => sendVideoProgress());
                         video.addEventListener('timeupdate', function() {
                             if (!video._lastProgressUpdate || Date.now() - video._lastProgressUpdate > 1000) {
@@ -698,12 +747,15 @@ class PlayerActivity : AppCompatActivity() {
                                 video._lastProgressUpdate = Date.now();
                             }
                         });
-                        enforceVolume(video);
+                        video.addEventListener('play', function() {
+                            enforceVolume(video);
+                        });
                     });
                 }
 
                 function observeVideoElements() {
                     const observer = new MutationObserver(() => {
+                        setMaxVolume();
                         monitorVideoEvents();
                     });
                     observer.observe(document.body, { childList: true, subtree: true });
@@ -711,7 +763,8 @@ class PlayerActivity : AppCompatActivity() {
 
                 monitorVideoEvents();
                 observeVideoElements();
-                setInterval(monitorVideoEvents, 10000);
+                setInterval(monitorVideoEvents, 5000);
+                setInterval(() => setMaxVolume(), 5000);
                 setInterval(sendVideoProgress, 15000);
             }
 
@@ -728,27 +781,36 @@ class PlayerActivity : AppCompatActivity() {
     private fun injectAutoplayScript(view: WebView?) {
         val autoplayJs = """
         (function() {
-
             function forcePlay(video) {
                 if (!video) return false;
 
                 try {
+                    // Ensure video is not muted
+                    if (video.hasAttribute('muted')) {
+                        video.removeAttribute('muted');
+                    }
+                    video.setAttribute('muted', 'false');
+                    video.muted = false;
+                    video.volume = 1.0;
+                    
                     video.autoplay = true;
                     video.playsInline = true;
-                    video.volume = 1.0;
 
                     const playPromise = video.play();
 
                     if (playPromise !== undefined) {
                         playPromise
                             .then(() => {
-                                console.log('[AutoPlay] Playback started');
+                                console.log('[AutoPlay] Playback started successfully');
                             })
                             .catch(err => {
                                 console.log('[AutoPlay] Initial play failed:', err);
-
+                                // Try muted as fallback
                                 video.muted = true;
-                                video.play().catch(() => {});
+                                video.setAttribute('muted', 'true');
+                                video.play().then(() => {
+                                    console.log('[AutoPlay] Playback started muted');
+                                }).catch(() => {});
                             });
                     }
 
@@ -783,7 +845,7 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             let attempts = 0;
-            const maxAttempts = 3;
+            const maxAttempts = 5;
 
             const interval = setInterval(() => {
                 attempts++;
@@ -800,10 +862,10 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
 
-            }, 5000);
+            }, 3000);
 
         })();
-    """.trimIndent()
+        """.trimIndent()
 
         view?.evaluateJavascript(autoplayJs, null)
     }
