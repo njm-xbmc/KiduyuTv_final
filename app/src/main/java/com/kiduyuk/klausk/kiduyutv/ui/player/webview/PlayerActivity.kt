@@ -305,8 +305,6 @@ class PlayerActivity : AppCompatActivity() {
 
             // Add window insets listener to prevent system UI from affecting WebView layout
             setOnApplyWindowInsetsListener { _, insets ->
-                // Return the insets without consuming them to maintain fullscreen behavior
-                // This prevents the WebView from being inset by status/navigation bars
                 insets
             }
 
@@ -353,6 +351,8 @@ class PlayerActivity : AppCompatActivity() {
                     injectVideoDetectionScript(this)
                     injectAdvancedPlayerScripts(this)
                     injectAutoplayScript(this)
+                    forceAutoplayOnPageLoad(this)
+                    verifyAutoplaySuccess()
                 },
                 onError = {
                     hasPageError = true
@@ -374,14 +374,13 @@ class PlayerActivity : AppCompatActivity() {
                     resultMsg: android.os.Message?
                 ): Boolean {
                     Log.i(TAG, "[WebChrome] onCreateWindow called, blocking popups")
-                    return false // Popups blocked
+                    return false
                 }
             }
 
             val iframeHtml = intent.getStringExtra("IFRAME_HTML")
             if (iframeHtml != null) {
                 Toast.makeText(this@PlayerActivity, "Loading via IFRAME mode", Toast.LENGTH_SHORT).show()
-                // Use the provider's base URL for correct security context and relative links
                 val baseUrl = com.kiduyuk.klausk.kiduyutv.data.model.StreamProviderManager.getBaseUrl(currentProviderName)
                 loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null)
             } else {
@@ -663,29 +662,20 @@ class PlayerActivity : AppCompatActivity() {
                 }
 
                 function enforceVolume(video) {
-                    // Force unmute using both attribute and property methods
                     try {
-                        // Remove muted attribute if it exists
                         if (video.hasAttribute('muted')) {
                             video.removeAttribute('muted');
                         }
-                        // Set muted attribute to false
                         video.setAttribute('muted', 'false');
-                        
-                        // Set volume to max
                         video.volume = 1.0;
-                        
-                        // Ensure muted property is false
                         video.muted = false;
                         
-                        // Try to play if paused
                         if (video.paused) {
                             video.play().catch(function(e) {
                                 console.log('[Volume] Could not auto-play: ' + e);
                             });
                         }
                         
-                        // Block volume change events that might re-mute
                         video.addEventListener('volumechange', function() {
                             if (video.volume < 1.0 || video.muted) {
                                 if (video.hasAttribute('muted')) {
@@ -710,7 +700,6 @@ class PlayerActivity : AppCompatActivity() {
                         enforceVolume(videos[i]);
                     }
                     
-                    // Also check for video in iframes
                     var iframes = document.querySelectorAll('iframe');
                     for (var j = 0; j < iframes.length; j++) {
                         try {
@@ -724,7 +713,6 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
                 
-                // Run setMaxVolume multiple times to catch videos that load later
                 setMaxVolume();
                 setTimeout(setMaxVolume, 2000);
                 setTimeout(setMaxVolume, 5000);
@@ -777,43 +765,102 @@ class PlayerActivity : AppCompatActivity() {
         view?.evaluateJavascript(advancedJs, null)
     }
 
-    // ★ Inject autoplay script
+    /**
+     * ★ Inject autoplay script with forced execution
+     */
     private fun injectAutoplayScript(view: WebView?) {
         val autoplayJs = """
         (function() {
+            console.log('[AutoPlay] Initializing forced autoplay');
+            
+            function clickPlayButton() {
+                var selectors = [
+                    'button.rounded-full.bg-white\\/95',
+                    'button[class*="rounded-full"][class*="bg-white"]',
+                    'button[class*="w-10"][class*="h-10"]',
+                    'button.rounded-full.bg-white',
+                    'button svg[viewBox="0 0 24 24"] path[d="M8 5v14l11-7z"]',
+                    'button svg path[d*="M8 5v14l11-7z"]',
+                    'button:has(svg[viewBox="0 0 24 24"])',
+                    '[class*="play"] button',
+                    'button[aria-label*="play" i]',
+                    '.vjs-big-play-button',
+                    '.jw-icon-playback',
+                    '.plyr__play',
+                    '.mejs__play button'
+                ];
+                
+                for (var selector of selectors) {
+                    try {
+                        var buttons = document.querySelectorAll(selector);
+                        for (var i = 0; i < buttons.length; i++) {
+                            var btn = buttons[i];
+                            if (btn && btn.click) {
+                                btn.click();
+                                console.log('[AutoPlay] Clicked play button:', selector);
+                                return true;
+                            }
+                        }
+                    } catch(e) {}
+                }
+                
+                var allButtons = document.querySelectorAll('button');
+                for (var i = 0; i < allButtons.length; i++) {
+                    var btn = allButtons[i];
+                    var svgs = btn.querySelectorAll('svg');
+                    for (var j = 0; j < svgs.length; j++) {
+                        var svgHtml = svgs[j].innerHTML;
+                        if (svgHtml.includes('M8 5v14l11-7z')) {
+                            btn.click();
+                            console.log('[AutoPlay] Clicked button with play SVG');
+                            return true;
+                        }
+                    }
+                }
+                
+                return false;
+            }
+            
             function forcePlay(video) {
                 if (!video) return false;
 
                 try {
-                    // Ensure video is not muted
                     if (video.hasAttribute('muted')) {
                         video.removeAttribute('muted');
                     }
                     video.setAttribute('muted', 'false');
                     video.muted = false;
                     video.volume = 1.0;
-                    
                     video.autoplay = true;
                     video.playsInline = true;
-
-                    const playPromise = video.play();
-
+                    
+                    var playPromise = video.play();
+                    
                     if (playPromise !== undefined) {
                         playPromise
                             .then(() => {
                                 console.log('[AutoPlay] Playback started successfully');
+                                if (window.VideasyInterface) {
+                                    window.VideasyInterface.postMessage(JSON.stringify({
+                                        type: 'autoplay_success',
+                                        timestamp: Date.now()
+                                    }));
+                                }
                             })
                             .catch(err => {
                                 console.log('[AutoPlay] Initial play failed:', err);
-                                // Try muted as fallback
                                 video.muted = true;
                                 video.setAttribute('muted', 'true');
                                 video.play().then(() => {
                                     console.log('[AutoPlay] Playback started muted');
+                                    setTimeout(function() {
+                                        video.muted = false;
+                                        video.removeAttribute('muted');
+                                        video.volume = 1.0;
+                                    }, 1000);
                                 }).catch(() => {});
                             });
                     }
-
                     return true;
                 } catch(e) {
                     console.log('[AutoPlay] Error:', e);
@@ -822,52 +869,330 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             function searchAndPlay() {
-                let video = document.querySelector('video');
-
-                if (video) {
-                    return forcePlay(video);
+                if (clickPlayButton()) {
+                    return true;
                 }
-
+                
+                let video = document.querySelector('video');
+                if (video && forcePlay(video)) {
+                    return true;
+                }
+                
                 const iframes = document.querySelectorAll('iframe');
-
                 for (let iframe of iframes) {
                     try {
                         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                         const iframeVideo = iframeDoc.querySelector('video');
-
-                        if (iframeVideo) {
-                            return forcePlay(iframeVideo);
+                        if (iframeVideo && forcePlay(iframeVideo)) {
+                            return true;
+                        }
+                        
+                        const iframeButtons = iframeDoc.querySelectorAll('button');
+                        for (let btn of iframeButtons) {
+                            if (btn.className.includes('rounded-full') || btn.className.includes('play')) {
+                                btn.click();
+                                console.log('[AutoPlay] Clicked button in iframe');
+                                return true;
+                            }
                         }
                     } catch(e) {}
                 }
-
                 return false;
             }
-
+            
+            searchAndPlay();
+            
             let attempts = 0;
-            const maxAttempts = 5;
-
-            const interval = setInterval(() => {
-                attempts++;
-
-                console.log('[AutoPlay] Attempt ' + attempts + '/' + maxAttempts);
-
-                const success = searchAndPlay();
-
-                if (success || attempts >= maxAttempts) {
-                    clearInterval(interval);
-
-                    if (!success) {
-                        console.log('[AutoPlay] No playable video found after retries');
-                    }
+            const maxAttempts = 10;
+            const delays = [100, 300, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000];
+            
+            function attemptPlay() {
+                if (attempts >= maxAttempts) {
+                    console.log('[AutoPlay] Max attempts reached');
+                    return;
                 }
-
-            }, 3000);
-
+                
+                const success = searchAndPlay();
+                attempts++;
+                
+                if (!success && attempts < maxAttempts) {
+                    const delay = delays[attempts] || 3000;
+                    console.log('[AutoPlay] Attempt ' + attempts + '/' + maxAttempts + ' failed, retrying in ' + delay + 'ms');
+                    setTimeout(attemptPlay, delay);
+                } else if (success) {
+                    console.log('[AutoPlay] Success on attempt ' + attempts);
+                }
+            }
+            
+            setTimeout(attemptPlay, delays[0]);
+            
+            const observer = new MutationObserver(function(mutations) {
+                let shouldAttempt = false;
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length > 0) {
+                        for (let i = 0; i < mutation.addedNodes.length; i++) {
+                            let node = mutation.addedNodes[i];
+                            if (node.tagName === 'VIDEO' || 
+                                (node.tagName === 'BUTTON' && node.className && 
+                                 (node.className.includes('rounded-full') || node.className.includes('play')))) {
+                                shouldAttempt = true;
+                                break;
+                            }
+                        }
+                    }
+                });
+                if (shouldAttempt) {
+                    console.log('[AutoPlay] New content detected, attempting play');
+                    setTimeout(searchAndPlay, 100);
+                }
+            });
+            
+            if (document.body) {
+                observer.observe(document.body, { childList: true, subtree: true });
+            }
+            
+            let periodicChecks = 0;
+            const periodicInterval = setInterval(function() {
+                periodicChecks++;
+                if (searchAndPlay() || periodicChecks >= 15) {
+                    clearInterval(periodicInterval);
+                }
+            }, 2000);
+            
         })();
         """.trimIndent()
 
         view?.evaluateJavascript(autoplayJs, null)
+    }
+
+    /**
+     * Force autoplay when page finishes loading
+     */
+    private fun forceAutoplayOnPageLoad(view: WebView?) {
+        val forceAutoplayJs = """
+        (function() {
+            console.log('[ForceAutoplay] Starting forced autoplay on page load');
+            
+            function findAndPlayVideo() {
+                var videos = document.querySelectorAll('video');
+                for (var i = 0; i < videos.length; i++) {
+                    var video = videos[i];
+                    if (tryPlayVideo(video)) {
+                        console.log('[ForceAutoplay] Successfully played direct video');
+                        return true;
+                    }
+                }
+                
+                var iframes = document.querySelectorAll('iframe');
+                for (var i = 0; i < iframes.length; i++) {
+                    try {
+                        var iframeDoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
+                        var iframeVideos = iframeDoc.querySelectorAll('video');
+                        for (var j = 0; j < iframeVideos.length; j++) {
+                            if (tryPlayVideo(iframeVideos[j])) {
+                                console.log('[ForceAutoplay] Successfully played iframe video');
+                                return true;
+                            }
+                        }
+                    } catch(e) {}
+                }
+                
+                var playButtonSelectors = [
+                    'button[class*="play"]', 'button[id*="play"]',
+                    'button[aria-label*="Play" i]', 'button[aria-label*="play" i]',
+                    'button[title*="Play" i]', 'button[title*="play" i]',
+                    '[class*="play-button"]', '[class*="play-btn"]', '[class*="play_btn"]',
+                    'button.rounded-full.bg-white', 'button[class*="rounded-full"][class*="bg-white"]',
+                    'button svg[viewBox*="24"] path[d*="M8 5v14l11-7z"]',
+                    '.plyr__controls button[data-plyr="play"]', '.video-js .vjs-big-play-button',
+                    '.jwplayer .jw-icon-playback'
+                ];
+                
+                for (var selector of playButtonSelectors) {
+                    try {
+                        var buttons = document.querySelectorAll(selector);
+                        for (var i = 0; i < buttons.length; i++) {
+                            var btn = buttons[i];
+                            if (btn && btn.click) {
+                                btn.click();
+                                console.log('[ForceAutoplay] Clicked play button with selector:', selector);
+                                return true;
+                            }
+                        }
+                    } catch(e) {}
+                }
+                
+                var allButtons = document.querySelectorAll('button, div[role="button"], a');
+                for (var i = 0; i < allButtons.length; i++) {
+                    var element = allButtons[i];
+                    try {
+                        var hasPlayIcon = false;
+                        var svgs = element.querySelectorAll('svg');
+                        for (var j = 0; j < svgs.length; j++) {
+                            var svgHtml = svgs[j].outerHTML.toLowerCase();
+                            if (svgHtml.includes('play') || (svgHtml.includes('path') && svgHtml.includes('d="'))) {
+                                var paths = svgs[j].querySelectorAll('path');
+                                for (var k = 0; k < paths.length; k++) {
+                                    var dAttr = paths[k].getAttribute('d') || '';
+                                    if (dAttr.includes('M') && dAttr.includes('v') && (dAttr.includes('l') || dAttr.includes('z'))) {
+                                        hasPlayIcon = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (hasPlayIcon) {
+                            element.click();
+                            console.log('[ForceAutoplay] Clicked button with play SVG icon');
+                            return true;
+                        }
+                    } catch(e) {}
+                }
+                
+                return false;
+            }
+            
+            function tryPlayVideo(video) {
+                if (!video) return false;
+                
+                try {
+                    if (video.hasAttribute('muted')) {
+                        video.removeAttribute('muted');
+                    }
+                    video.setAttribute('muted', 'false');
+                    video.muted = false;
+                    video.volume = 1.0;
+                    video.autoplay = true;
+                    video.playsInline = true;
+                    
+                    var playPromise = video.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise.then(function() {
+                            console.log('[ForceAutoplay] Video playing successfully');
+                            return true;
+                        }).catch(function(error) {
+                            console.log('[ForceAutoplay] Play failed:', error);
+                            video.muted = true;
+                            video.setAttribute('muted', 'true');
+                            video.play().catch(function(e) {});
+                            return false;
+                        });
+                        return true;
+                    }
+                } catch(e) {
+                    console.log('[ForceAutoplay] Error playing video:', e);
+                }
+                return false;
+            }
+            
+            var played = findAndPlayVideo();
+            
+            if (!played) {
+                console.log('[ForceAutoplay] Initial attempt failed, scheduling retries');
+                
+                var retries = [100, 300, 500, 1000, 2000, 3000, 5000, 8000];
+                retries.forEach(function(delay, index) {
+                    setTimeout(function() {
+                        console.log('[ForceAutoplay] Retry ' + (index + 1) + '/' + retries.length);
+                        findAndPlayVideo();
+                        
+                        var visibleButtons = document.querySelectorAll('button');
+                        for (var i = 0; i < visibleButtons.length; i++) {
+                            var btn = visibleButtons[i];
+                            var rect = btn.getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0) {
+                                btn.click();
+                                console.log('[ForceAutoplay] Clicked visible button');
+                                break;
+                            }
+                        }
+                    }, delay);
+                });
+            }
+            
+            var observer = new MutationObserver(function(mutations) {
+                var needsPlay = false;
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length > 0) {
+                        for (var i = 0; i < mutation.addedNodes.length; i++) {
+                            var node = mutation.addedNodes[i];
+                            if (node.tagName === 'VIDEO' || 
+                                (node.tagName === 'BUTTON' && (node.className || '').includes('rounded-full'))) {
+                                needsPlay = true;
+                                break;
+                            }
+                        }
+                    }
+                });
+                if (needsPlay) {
+                    console.log('[ForceAutoplay] New video/button detected, attempting play');
+                    setTimeout(function() {
+                        findAndPlayVideo();
+                    }, 100);
+                }
+            });
+            
+            if (document.body) {
+                observer.observe(document.body, { childList: true, subtree: true });
+            }
+            
+            var checkCount = 0;
+            var maxChecks = 15;
+            var interval = setInterval(function() {
+                checkCount++;
+                var success = findAndPlayVideo();
+                
+                if (!success) {
+                    var centerX = window.innerWidth / 2;
+                    var centerY = window.innerHeight / 2;
+                    var centerElement = document.elementFromPoint(centerX, centerY);
+                    if (centerElement && centerElement.click) {
+                        centerElement.click();
+                        console.log('[ForceAutoplay] Clicked element at screen center');
+                        success = true;
+                    }
+                }
+                
+                if (success || checkCount >= maxChecks) {
+                    clearInterval(interval);
+                }
+            }, 2000);
+            
+        })();
+        """.trimIndent()
+        
+        view?.evaluateJavascript(forceAutoplayJs, null)
+    }
+
+    /**
+     * Check if autoplay was successful and retry if needed
+     */
+    private fun verifyAutoplaySuccess() {
+        Handler(Looper.getMainLooper()).postDelayed({
+            webView.evaluateJavascript(
+                """
+                (function() {
+                    var videos = document.querySelectorAll('video');
+                    if (videos.length > 0) {
+                        var isPlaying = !videos[0].paused && !videos[0].ended && videos[0].currentTime > 0;
+                        return isPlaying ? 'playing' : 'not_playing';
+                    }
+                    return 'no_video';
+                })();
+                """.trimIndent()
+            ) { result ->
+                when (result) {
+                    "playing" -> Log.i(TAG, "[Autoplay] Verification: Video is playing")
+                    "not_playing" -> {
+                        Log.w(TAG, "[Autoplay] Verification: Video not playing, forcing again")
+                        forceAutoplayOnPageLoad(webView)
+                    }
+                    else -> Log.w(TAG, "[Autoplay] Verification: No video element found")
+                }
+            }
+        }, 5000)
     }
 
     private fun setupImmersiveMode() {
@@ -917,16 +1242,6 @@ class PlayerActivity : AppCompatActivity() {
         webView.onPause()
         webView.pauseTimers()
         progressHandler.removeCallbacks(progressRunnable)
-    }
-
-    private fun safeSetSafeBrowsingEnabled(settings: WebSettings, enabled: Boolean) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                settings.safeBrowsingEnabled = enabled
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to set safe browsing: ${e.message}")
-        }
     }
 
     override fun onDestroy() {
@@ -1009,17 +1324,13 @@ class PlayerActivity : AppCompatActivity() {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /**
-     * Detect provider name from URL using StreamProviderManager
-     */
     private fun detectProviderFromUrl(url: String): String {
         val urlHost = try {
             android.net.Uri.parse(url).host?.lowercase() ?: ""
         } catch (e: Exception) {
-            return "VidLink" // Default fallback
+            return "VidLink"
         }
 
-        // Match against all providers from StreamProviderManager
         StreamProviderManager.providers.forEach { provider ->
             try {
                 val providerBaseUrl = StreamProviderManager.getBaseUrl(provider.name)
@@ -1036,7 +1347,7 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
-        return "VidLink" // Default fallback
+        return "VidLink"
     }
 
     private fun updateCursorPosition() {
@@ -1127,7 +1438,6 @@ private class AdBlockerWebViewClient(
     private val onError: () -> Unit
 ) : WebViewClient() {
 
-    // Common ad domains to block
     private val adDomains = setOf(
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
         "adnxs.com", "advertising.com", "adsystem.com", "adserver.com",
@@ -1144,9 +1454,7 @@ private class AdBlockerWebViewClient(
     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
         val url = request?.url?.toString()?.lowercase() ?: return null
         
-        // Check if the URL contains any blocked domains
         if (adDomains.any { url.contains(it) }) {
-            // Return an empty response to block the request
             return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream("".toByteArray()))
         }
         
@@ -1157,7 +1465,6 @@ private class AdBlockerWebViewClient(
         super.onPageFinished(view, url)
         onPageFinished()
         
-        // Inject JS to remove ad elements
         view?.evaluateJavascript(
             """
             (function() {
@@ -1165,7 +1472,6 @@ private class AdBlockerWebViewClient(
                 style.innerHTML = 'div[id^="ad"], div[class^="ad"], .popup, .overlay { display: none !important; }';
                 document.head.appendChild(style);
                 
-                // Remove existing ad elements
                 var ads = document.querySelectorAll('div[id^="ad"], div[class^="ad"], iframe[src*="doubleclick"], iframe[src*="google"]');
                 ads.forEach(function(ad) { ad.remove(); });
             })();
@@ -1174,7 +1480,6 @@ private class AdBlockerWebViewClient(
     }
     
     override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?) {
-         // Don't trigger error for blocked ads (subresources)
         if (request?.isForMainFrame == true) {
             onError()
         }
