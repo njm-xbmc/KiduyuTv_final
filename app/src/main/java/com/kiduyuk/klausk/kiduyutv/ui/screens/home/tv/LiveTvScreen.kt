@@ -3,6 +3,7 @@ package com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
@@ -10,8 +11,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,8 +26,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,7 +50,7 @@ import com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel
 
 /**
  * Composable function for the Live TV screen.
- * Displays categories and channels based on the IPTV playlist.
+ * Displays categories, channels, and search functionality for IPTV playlist.
  *
  * @param onChannelPlay Callback when a channel is selected for playback
  * @param onNavigate Lambda to handle navigation between top-level screens
@@ -61,13 +69,13 @@ fun LiveTvScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    
+
     // Initialize ViewModel with context for caching
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
         viewModel.loadPlaylist()
     }
-    
+
     // Handle channel selection for playback
     LaunchedEffect(uiState.selectedChannel) {
         uiState.selectedChannel?.let { channel ->
@@ -75,7 +83,7 @@ fun LiveTvScreen(
             viewModel.clearSelectedChannel()
         }
     }
-    
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -93,9 +101,9 @@ fun LiveTvScreen(
                 onSettingsClick = onSettingsClick,
                 onNotificationClick = onNotificationClick
             )
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             when {
                 // Loading state
                 uiState.isLoading -> {
@@ -108,7 +116,7 @@ fun LiveTvScreen(
                         LottieLoadingView(size = 300.dp)
                     }
                 }
-                
+
                 // Error state
                 uiState.error != null -> {
                     ErrorContent(
@@ -116,17 +124,31 @@ fun LiveTvScreen(
                         onRetry = { viewModel.loadPlaylist(forceRefresh = true) }
                     )
                 }
-                
+
+                // Search mode
+                uiState.isSearchActive -> {
+                    SearchContent(
+                        searchQuery = uiState.searchQuery,
+                        searchResults = uiState.searchResults,
+                        onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                        onChannelClick = { viewModel.selectChannel(it) },
+                        onCloseSearch = { viewModel.deactivateSearch() },
+                        onBackClick = { viewModel.deactivateSearch() }
+                    )
+                }
+
                 // Categories view
                 uiState.selectedCategory == null -> {
                     CategoriesContent(
                         categories = uiState.categories,
                         onCategoryClick = { category ->
                             viewModel.selectCategory(category.name)
-                        }
+                        },
+                        onSearchClick = { viewModel.activateSearch() },
+                        totalChannels = viewModel.getTotalChannelCount()
                     )
                 }
-                
+
                 // Channels view
                 else -> {
                     ChannelsContent(
@@ -149,32 +171,51 @@ fun LiveTvScreen(
 @Composable
 private fun CategoriesContent(
     categories: List<CategoryItem>,
-    onCategoryClick: (CategoryItem) -> Unit
+    onCategoryClick: (CategoryItem) -> Unit,
+    onSearchClick: () -> Unit,
+    totalChannels: Int
 ) {
     // Focus requester for D-pad navigation
     val firstFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
-    
+
     // Request focus on first item when categories load
     LaunchedEffect(categories) {
         if (categories.isNotEmpty()) {
             firstFocusRequester.requestFocus()
         }
     }
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
-        Text(
-            text = "Live TV Categories",
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
+        // Header row with title and search button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Live TV Categories",
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "$totalChannels channels available",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
+
+            SearchButton(onClick = onSearchClick)
+        }
+
         if (categories.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -216,6 +257,278 @@ private fun CategoriesContent(
 }
 
 /**
+ * Search button component for TV navigation.
+ */
+@Composable
+private fun SearchButton(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isFocused) PrimaryRed else DarkRed)
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) Color.White else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search",
+                tint = Color.White
+            )
+            Text(
+                text = "Search Channels",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/**
+ * Content displaying search interface and results.
+ */
+@Composable
+private fun SearchContent(
+    searchQuery: String,
+    searchResults: List<IptvChannel>,
+    onSearchQueryChange: (String) -> Unit,
+    onChannelClick: (IptvChannel) -> Unit,
+    onCloseSearch: () -> Unit,
+    onBackClick: () -> Unit
+) {
+    val backFocusRequester = remember { FocusRequester() }
+    val searchFocusRequester = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
+
+    // Request focus on search field when screen opens
+    LaunchedEffect(Unit) {
+        searchFocusRequester.requestFocus()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        // Back button and search header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 16.dp)
+        ) {
+            val backInteractionSource = remember { MutableInteractionSource() }
+            val isBackFocused by backInteractionSource.collectIsFocusedAsState()
+
+            Box(
+                modifier = Modifier
+                    .focusRequester(backFocusRequester)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isBackFocused) PrimaryRed else DarkRed)
+                    .clickable(
+                        interactionSource = backInteractionSource,
+                        indication = null,
+                        onClick = onBackClick
+                    )
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "\u2190 Back",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Text(
+                text = "Search Channels",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // Search input field
+        SearchInputField(
+            query = searchQuery,
+            onQueryChange = onSearchQueryChange,
+            onClear = { onSearchQueryChange("") },
+            focusRequester = searchFocusRequester
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Search results count
+        if (searchQuery.isNotBlank()) {
+            Text(
+                text = "${searchResults.size} channel(s) found",
+                color = TextSecondary,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
+
+        // Results grid or empty state
+        if (searchResults.isEmpty() && searchQuery.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "No channels found for \"$searchQuery\"",
+                        color = TextSecondary,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        text = "Try a different search term",
+                        color = TextSecondary.copy(alpha = 0.7f),
+                        fontSize = 14.sp
+                    )
+                }
+            }
+        } else if (searchResults.isNotEmpty()) {
+            // Request focus on first channel when grid is ready
+            LaunchedEffect(searchResults) {
+                firstChannelFocusRequester.requestFocus()
+            }
+
+            val firstChannelFocusRequester = remember { FocusRequester() }
+
+            LazyVerticalGrid(
+                state = gridState,
+                columns = GridCells.Fixed(4),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                itemsIndexed(searchResults) { index, channel ->
+                    val modifier = if (index == 0) {
+                        Modifier.focusRequester(firstChannelFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                    ChannelCard(
+                        channel = channel,
+                        modifier = modifier,
+                        onClick = { onChannelClick(channel) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Search input field with TV navigation support.
+ */
+@Composable
+private fun SearchInputField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+    focusRequester: FocusRequester
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(CardDark)
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) PrimaryRed else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .focusable(
+                interactionSource = interactionSource,
+                indication = null
+            )
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search",
+                tint = if (isFocused) PrimaryRed else TextSecondary,
+                modifier = Modifier.size(24.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Box(modifier = Modifier.weight(1f)) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = "Type channel name to search...",
+                        color = TextSecondary,
+                        fontSize = 16.sp
+                    )
+                }
+
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    textStyle = TextStyle(
+                        color = Color.White,
+                        fontSize = 16.sp
+                    ),
+                    cursorBrush = SolidColor(PrimaryRed),
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                )
+            }
+
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClear) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Clear",
+                        tint = TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Card component for displaying a category.
  */
 @Composable
@@ -226,7 +539,7 @@ private fun CategoryCard(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -282,12 +595,12 @@ private fun ChannelsContent(
     val backFocusRequester = remember { FocusRequester() }
     val firstChannelFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
-    
+
     // Request focus on back button when screen opens
     LaunchedEffect(categoryName) {
         backFocusRequester.requestFocus()
     }
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -300,7 +613,7 @@ private fun ChannelsContent(
         ) {
             val backInteractionSource = remember { MutableInteractionSource() }
             val isBackFocused by backInteractionSource.collectIsFocusedAsState()
-            
+
             Box(
                 modifier = Modifier
                     .focusRequester(backFocusRequester)
@@ -319,17 +632,24 @@ private fun ChannelsContent(
                     fontSize = 14.sp
                 )
             }
-            
+
             Spacer(modifier = Modifier.width(16.dp))
-            
-            Text(
-                text = categoryName,
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
+
+            Column {
+                Text(
+                    text = categoryName,
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${channels.size} channels",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
         }
-        
+
         if (channels.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -350,7 +670,7 @@ private fun ChannelsContent(
                     firstChannelFocusRequester.requestFocus()
                 }
             }
-            
+
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Fixed(4),
@@ -389,7 +709,7 @@ private fun ChannelCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val context = LocalContext.current
-    
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -428,7 +748,7 @@ private fun ChannelCard(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
-            
+
             Text(
                 text = channel.name,
                 color = Color.White,
@@ -471,10 +791,10 @@ private fun ErrorContent(
                 fontSize = 14.sp
             )
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             val interactionSource = remember { MutableInteractionSource() }
             val isRetryFocused by interactionSource.collectIsFocusedAsState()
-            
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
