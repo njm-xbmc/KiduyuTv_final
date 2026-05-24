@@ -215,12 +215,14 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 11. VidSrc (WTF) v1 - Multi Server
+        // 11. PrimeSrc
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
-            name = "VidSrc (WTF) v1",
-            movieUrlTemplate = "https://vidsrc.wtf/api/1/movie/?id=%d",
-            tvUrlTemplate = "https://vidsrc.wtf/api/1/tv/?id=%d&s=%d&e=%d"
+            name = "PrimeSrc",
+            movieUrlTemplate = "https://primesrc.me/embed/movie?tmdb=%d",
+            tvUrlTemplate = "https://primesrc.me/embed/tv?tmdb=%d&season=%d&episode=%d",
+            movieParameters = { _, _ -> emptyMap() },
+            tvParameters = { _, _, _, _ -> emptyMap() }
         ),
 
         // ═══════════════════════════════════════════════════════════════
@@ -329,14 +331,12 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 19. PrimeSrc
+        // 19. VidSrc (WTF) v1 - Multi Server
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
-            name = "PrimeSrc",
-            movieUrlTemplate = "https://primesrc.me/embed/movie?tmdb=%d",
-            tvUrlTemplate = "https://primesrc.me/embed/tv?tmdb=%d&season=%d&episode=%d",
-            movieParameters = { _, _ -> emptyMap() },
-            tvParameters = { _, _, _, _ -> emptyMap() }
+            name = "VidSrc (WTF) v1",
+            movieUrlTemplate = "https://vidsrc.wtf/api/1/movie/?id=%d",
+            tvUrlTemplate = "https://vidsrc.wtf/api/1/tv/?id=%d&s=%d&e=%d"
         )
     )
 

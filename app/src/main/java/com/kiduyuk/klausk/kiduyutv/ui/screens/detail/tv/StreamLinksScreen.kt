@@ -289,7 +289,7 @@ fun StreamProviderItem(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
 
                     when (provider.name) {
-                        "Vidsync", "EmbedMaster" -> Tag("may show black screen on firetv devices", Color(0xFFFFC107), Color.Black)
+                        "Vidsync", "EmbedMaster", "Autoembed", "VidSrc (WTF) v1" -> Tag("may show black screen on firetv devices", Color(0xFFFFC107), Color.Black)
                         else -> Tag("FAST", Color(0xFF4CAF50), Color.White)
                     }
 
