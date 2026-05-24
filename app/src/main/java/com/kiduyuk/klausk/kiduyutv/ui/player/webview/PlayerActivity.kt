@@ -1,12 +1,15 @@
 package com.kiduyuk.klausk.kiduyutv.ui.player.webview
 
 import android.annotation.SuppressLint
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
-import android.os.SystemClock
+import android.os.PowerManager
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -14,12 +17,18 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.UiModeManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import android.content.res.Configuration
 import android.webkit.*
 import android.widget.FrameLayout
+import androidx.core.app.NotificationCompat
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.OnBackPressedCallback
 import com.kiduyuk.klausk.kiduyutv.R
@@ -263,8 +272,10 @@ class PlayerActivity : AppCompatActivity() {
             Log.i(TAG, "[Device] $deviceType detected (${deviceBrand} $deviceModel), disabling cursor")
 
             // Show detailed toast for mobile/tablet devices
-            val toastMessage = "Device: $deviceType\nBrand: $deviceBrand | Model: $deviceModel"
-            Toast.makeText(this, toastMessage, Toast.LENGTH_LONG).show()
+            val toastMessage = "Device: $deviceType | Brand: $deviceBrand | Model: $deviceModel"
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(this@PlayerActivity, toastMessage, Toast.LENGTH_LONG).show()
+            }
         } else {
             isFireTV = Build.MANUFACTURER.equals("Amazon", ignoreCase = true)
             Log.i(TAG, "[Device] TV detected (${deviceBrand} $deviceModel), cursor enabled, isFireTV=$isFireTV")
@@ -275,8 +286,10 @@ class PlayerActivity : AppCompatActivity() {
             } else {
                 "Android TV (WebView)"
             }
-            val toastMessage = "Device: $deviceLabel\nBrand: $deviceBrand | Model: $deviceModel"
-            Toast.makeText(this, toastMessage, Toast.LENGTH_LONG).show()
+            val toastMessage = "Device: $deviceLabel | Brand: $deviceBrand | Model: $deviceModel"
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(this@PlayerActivity, toastMessage, Toast.LENGTH_LONG).show()
+            }
         }
 
         val existsInHistory = repository.isInWatchHistory(this, tmdbId, isTv)
@@ -805,6 +818,100 @@ class PlayerActivity : AppCompatActivity() {
         (function() {
             console.log('[AutoPlay] Initializing forced autoplay');
             
+            function hideOverlaysAndUpdateView() {
+                // Hide all overlay elements that block video visibility
+                var overlaySelectors = [
+                    '.fixed.inset-0.bg-black\\/60',  // Dark overlay behind play button
+                    '[class*="overlay"][class*="bg-black"]',
+                    '[class*="overlay"]:not(video)',
+                    '.bg-black\\/60',
+                    '.bg-opacity-60',
+                    '.absolute.inset-0:not(video)',
+                    'div[class*="centered"]:not(video)',
+                    'div[class*="play-overlay"]',
+                    '[class*="player-overlay"]',
+                    '.video-controls-overlay',
+                    // Hide play buttons and big play buttons
+                    '.rounded-full.bg-white\\/95',
+                    'button[class*="rounded-full"][class*="bg-white"]',
+                    '.vjs-big-play-button',
+                    '.jw-play-button',
+                    '.plyr__play',
+                    '[class*="play-button"]:not(video)',
+                    // Hide thumbnail/preview
+                    'video ~ div:not(video):first-of-type',
+                    '[class*="poster"]:not(video)',
+                    '[class*="thumbnail"]'
+                ];
+                
+                overlaySelectors.forEach(function(selector) {
+                    try {
+                        var elements = document.querySelectorAll(selector);
+                        elements.forEach(function(el) {
+                            // Don't hide the actual video element
+                            if (el.tagName !== 'VIDEO' && el.tagName !== 'IFRAME') {
+                                // Check if element is over a playing video
+                                var isOverVideo = false;
+                                var parent = el.parentElement;
+                                while (parent) {
+                                    if (parent.querySelector && parent.querySelector('video[paused=false]')) {
+                                        isOverVideo = true;
+                                        break;
+                                    }
+                                    parent = parent.parentElement;
+                                }
+                                
+                                // Only hide if video is actually playing beneath
+                                var videos = document.querySelectorAll('video');
+                                for (var v = 0; v < videos.length; v++) {
+                                    if (!videos[v].paused && videos[v].currentTime > 0) {
+                                        el.style.display = 'none';
+                                        el.style.visibility = 'hidden';
+                                        el.style.opacity = '0';
+                                        el.style.pointerEvents = 'none';
+                                        console.log('[AutoPlay] Hidden overlay:', selector);
+                                        break;
+                                    }
+                                }
+                            }
+                        });
+                    } catch(e) {}
+                });
+                
+                // Force video to be visible and in front
+                var videos = document.querySelectorAll('video');
+                videos.forEach(function(v) {
+                    if (!v.paused) {
+                        // Ensure video has proper z-index
+                        v.style.position = 'relative';
+                        v.style.zIndex = '1';
+                        
+                        // Force show video element
+                        v.style.display = 'block';
+                        v.style.visibility = 'visible';
+                        
+                        // Find and hide parent overlays
+                        var parent = v.parentElement;
+                        while (parent && parent !== document.body) {
+                            var computedStyle = window.getComputedStyle(parent);
+                            if (computedStyle.position === 'absolute' || computedStyle.position === 'fixed') {
+                                // Check if this is an overlay by checking background opacity
+                                var bgColor = computedStyle.backgroundColor;
+                                if (bgColor && bgColor.includes('rgba') && bgColor.includes(', 0.')) {
+                                    parent.style.display = 'none';
+                                    console.log('[AutoPlay] Hidden parent overlay');
+                                }
+                            }
+                            parent = parent.parentElement;
+                        }
+                        
+                        // Dispatch events to update UI
+                        v.dispatchEvent(new Event('playing'));
+                        v.dispatchEvent(new Event('progress'));
+                    }
+                });
+            }
+            
             function clickPlayButton() {
                 var selectors = [
                     'button.rounded-full.bg-white\\/95',
@@ -819,7 +926,11 @@ class PlayerActivity : AppCompatActivity() {
                     '.vjs-big-play-button',
                     '.jw-icon-playback',
                     '.plyr__play',
-                    '.mejs__play button'
+                    '.mejs__play button',
+                    // Additional selectors for VidLink/Stremio style players
+                    'button[class*="play"][class*="center"]',
+                    '[class*="rounded"][class*="white"]:has(svg)',
+                    'div[role="button"]:has(svg path[d*="M8"])'
                 ];
                 
                 for (var selector of selectors) {
@@ -827,25 +938,41 @@ class PlayerActivity : AppCompatActivity() {
                         var buttons = document.querySelectorAll(selector);
                         for (var i = 0; i < buttons.length; i++) {
                             var btn = buttons[i];
-                            if (btn && btn.click) {
-                                btn.click();
-                                console.log('[AutoPlay] Clicked play button:', selector);
-                                return true;
+                            var rect = btn.getBoundingClientRect();
+                            // Only click visible, reasonably sized buttons
+                            if (rect.width > 20 && rect.height > 20 && rect.width < 200 && rect.height < 200) {
+                                if (btn && btn.click) {
+                                    btn.click();
+                                    console.log('[AutoPlay] Clicked play button:', selector);
+                                    
+                                    // Immediately try to hide any overlays
+                                    setTimeout(hideOverlaysAndUpdateView, 500);
+                                    
+                                    return true;
+                                }
                             }
                         }
                     } catch(e) {}
                 }
                 
+                // Fallback: find any button with play icon SVG
                 var allButtons = document.querySelectorAll('button');
                 for (var i = 0; i < allButtons.length; i++) {
                     var btn = allButtons[i];
                     var svgs = btn.querySelectorAll('svg');
                     for (var j = 0; j < svgs.length; j++) {
                         var svgHtml = svgs[j].innerHTML;
-                        if (svgHtml.includes('M8 5v14l11-7z')) {
-                            btn.click();
-                            console.log('[AutoPlay] Clicked button with play SVG');
-                            return true;
+                        if (svgHtml.includes('M8 5v14l11-7z') || svgHtml.includes('play')) {
+                            var rect = btn.getBoundingClientRect();
+                            if (rect.width > 20 && rect.height > 20) {
+                                btn.click();
+                                console.log('[AutoPlay] Clicked button with play SVG');
+                                
+                                // Immediately try to hide any overlays
+                                setTimeout(hideOverlaysAndUpdateView, 500);
+                                
+                                return true;
+                            }
                         }
                     }
                 }
@@ -857,6 +984,20 @@ class PlayerActivity : AppCompatActivity() {
                 if (!video) return false;
 
                 try {
+                    // Remove any overlay blocking the video
+                    var parent = video.parentElement;
+                    while (parent && parent !== document.body) {
+                        var style = window.getComputedStyle(parent);
+                        if (style.backgroundColor && style.backgroundColor.includes('rgba')) {
+                            // This is likely an overlay
+                            var alpha = style.backgroundColor.match(/[\d.]+(?=,)/);
+                            if (alpha && parseFloat(alpha) > 0.3) {
+                                parent.style.display = 'none';
+                            }
+                        }
+                        parent = parent.parentElement;
+                    }
+                    
                     if (video.hasAttribute('muted')) {
                         video.removeAttribute('muted');
                     }
@@ -872,6 +1013,10 @@ class PlayerActivity : AppCompatActivity() {
                         playPromise
                             .then(() => {
                                 console.log('[AutoPlay] Playback started successfully');
+                                
+                                // Hide overlays immediately when playback starts
+                                hideOverlaysAndUpdateView();
+                                
                                 if (window.VideasyInterface) {
                                     window.VideasyInterface.postMessage(JSON.stringify({
                                         type: 'autoplay_success',
@@ -885,10 +1030,15 @@ class PlayerActivity : AppCompatActivity() {
                                 video.setAttribute('muted', 'true');
                                 video.play().then(() => {
                                     console.log('[AutoPlay] Playback started muted');
+                                    
+                                    // Hide overlays even with muted autoplay
+                                    hideOverlaysAndUpdateView();
+                                    
                                     setTimeout(function() {
                                         video.muted = false;
                                         video.removeAttribute('muted');
                                         video.volume = 1.0;
+                                        hideOverlaysAndUpdateView();
                                     }, 1000);
                                 }).catch(() => {});
                             });
@@ -901,30 +1051,65 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             function searchAndPlay() {
+                // First, hide any existing overlays
+                hideOverlaysAndUpdateView();
+                
                 if (clickPlayButton()) {
+                    setTimeout(hideOverlaysAndUpdateView, 300);
                     return true;
                 }
                 
                 let video = document.querySelector('video');
-                if (video && forcePlay(video)) {
-                    return true;
+                if (video) {
+                    // Check if video is already playing
+                    if (!video.paused && video.currentTime > 0) {
+                        hideOverlaysAndUpdateView();
+                        return true;
+                    }
+                    
+                    if (forcePlay(video)) {
+                        setTimeout(hideOverlaysAndUpdateView, 500);
+                        return true;
+                    }
                 }
                 
+                // Try iframes
                 const iframes = document.querySelectorAll('iframe');
                 for (let iframe of iframes) {
                     try {
                         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                         const iframeVideo = iframeDoc.querySelector('video');
-                        if (iframeVideo && forcePlay(iframeVideo)) {
-                            return true;
+                        if (iframeVideo) {
+                            if (!iframeVideo.paused && iframeVideo.currentTime > 0) {
+                                hideOverlaysAndUpdateView();
+                                return true;
+                            }
+                            
+                            if (forcePlay(iframeVideo)) {
+                                // Hide iframe parent overlays
+                                var iframeParent = iframe.parentElement;
+                                while (iframeParent && iframeParent !== document.body) {
+                                    var style = window.getComputedStyle(iframeParent);
+                                    if (style.backgroundColor && style.backgroundColor.includes('rgba')) {
+                                        iframeParent.style.display = 'none';
+                                    }
+                                    iframeParent = iframeParent.parentElement;
+                                }
+                                setTimeout(hideOverlaysAndUpdateView, 500);
+                                return true;
+                            }
                         }
                         
                         const iframeButtons = iframeDoc.querySelectorAll('button');
                         for (let btn of iframeButtons) {
-                            if (btn.className.includes('rounded-full') || btn.className.includes('play')) {
-                                btn.click();
-                                console.log('[AutoPlay] Clicked button in iframe');
-                                return true;
+                            if (btn.className && (btn.className.includes('rounded-full') || btn.className.includes('play'))) {
+                                var rect = btn.getBoundingClientRect();
+                                if (rect.width > 20 && rect.height > 20) {
+                                    btn.click();
+                                    console.log('[AutoPlay] Clicked button in iframe');
+                                    setTimeout(hideOverlaysAndUpdateView, 500);
+                                    return true;
+                                }
                             }
                         }
                     } catch(e) {}
@@ -935,17 +1120,22 @@ class PlayerActivity : AppCompatActivity() {
             searchAndPlay();
             
             let attempts = 0;
-            const maxAttempts = 10;
-            const delays = [100, 300, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000];
+            const maxAttempts = 15;
+            const delays = [100, 300, 500, 800, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 8000, 10000, 12000];
             
             function attemptPlay() {
                 if (attempts >= maxAttempts) {
                     console.log('[AutoPlay] Max attempts reached');
+                    // Final attempt to hide overlays even if play didn't trigger
+                    hideOverlaysAndUpdateView();
                     return;
                 }
                 
                 const success = searchAndPlay();
                 attempts++;
+                
+                // After each attempt, also try to hide overlays
+                hideOverlaysAndUpdateView();
                 
                 if (!success && attempts < maxAttempts) {
                     const delay = delays[attempts] || 3000;
@@ -953,10 +1143,17 @@ class PlayerActivity : AppCompatActivity() {
                     setTimeout(attemptPlay, delay);
                 } else if (success) {
                     console.log('[AutoPlay] Success on attempt ' + attempts);
+                    // Keep checking and hiding overlays for a while after success
+                    for (var i = 1; i <= 5; i++) {
+                        setTimeout(hideOverlaysAndUpdateView, i * 1000);
+                    }
                 }
             }
             
             setTimeout(attemptPlay, delays[0]);
+            
+            // Periodic overlay check - keep hiding overlays for the entire session
+            setInterval(hideOverlaysAndUpdateView, 2000);
             
             const observer = new MutationObserver(function(mutations) {
                 let shouldAttempt = false;
@@ -977,6 +1174,9 @@ class PlayerActivity : AppCompatActivity() {
                     console.log('[AutoPlay] New content detected, attempting play');
                     setTimeout(searchAndPlay, 100);
                 }
+                
+                // Also trigger overlay hide on any DOM change
+                hideOverlaysAndUpdateView();
             });
             
             if (document.body) {
