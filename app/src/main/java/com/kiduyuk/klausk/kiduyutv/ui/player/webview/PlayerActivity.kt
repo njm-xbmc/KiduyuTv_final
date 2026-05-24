@@ -453,8 +453,6 @@ class PlayerActivity : AppCompatActivity() {
         rootLayout.isFocusableInTouchMode = true
         rootLayout.requestFocus()
 
-        setupImmersiveMode()
-
         rootLayout.post {
             screenWidth = rootLayout.width
             screenHeight = rootLayout.height
@@ -833,7 +831,6 @@ class PlayerActivity : AppCompatActivity() {
         webView.onResume()
         webView.resumeTimers()
         progressHandler.postDelayed(progressRunnable, 15_000L)
-        setupImmersiveMode()
     }
 
     override fun onPause() {
