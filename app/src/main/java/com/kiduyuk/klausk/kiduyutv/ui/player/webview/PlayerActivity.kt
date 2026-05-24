@@ -1340,7 +1340,13 @@ class PlayerActivity : AppCompatActivity() {
                 """.trimIndent()
             ) { result ->
                 when (result) {
-                    "playing" -> Log.i(TAG, "[Autoplay] Verification: Video is playing")
+                    "playing" -> {
+                        Log.i(TAG, "[Autoplay] Verification: Video is playing")
+                        // Force WebView UI to update since video started playing via autoplay
+                        // This ensures the play button overlay is updated to pause state
+                        forceWebViewUpdate()
+                        syncWebViewMediaState()
+                    }
                     "not_playing" -> {
                         Log.w(TAG, "[Autoplay] Verification: Video not playing, forcing again")
                         forceAutoplayOnPageLoad(webView)
