@@ -1,6 +1,5 @@
 package com.kiduyuk.klausk.kiduyutv.ui.player.iptv
 
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -10,16 +9,27 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.annotation.OptIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
-import androidx.media3.ui.TrackSelectionDialogBuilder
 import com.kiduyuk.klausk.kiduyutv.R
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
 
@@ -58,6 +68,8 @@ class IptvPlayerActivity : ComponentActivity() {
     private var player: ExoPlayer? = null
     private var playerView: PlayerView? = null
     private lateinit var trackSelector: DefaultTrackSelector
+    private lateinit var rootLayout: FrameLayout
+    private var composeDialogView: ComposeView? = null
     
     private var channelName: String = ""
     private var streamUrl: String = ""
@@ -80,8 +92,7 @@ class IptvPlayerActivity : ComponentActivity() {
         trackSelector = DefaultTrackSelector(this)
         trackSelector.setParameters(
             trackSelector.buildUponParameters()
-                //.setMaxVideoSizeSd()
-                  .clearVideoSizeConstraints() 
+                .clearVideoSizeConstraints() 
                 .setForceLowestBitrate(false)
         )
         
@@ -106,7 +117,6 @@ class IptvPlayerActivity : ComponentActivity() {
             setShowNextButton(true)
             setShowPreviousButton(true)
             
-            // Enabling the listener forces the Fullscreen toggle button to appear
             setFullscreenButtonClickListener { isFullScreen ->
                 if (!isFullScreen) {
                     showExitConfirmationDialog()
@@ -119,7 +129,7 @@ class IptvPlayerActivity : ComponentActivity() {
             )
         }
         
-        val rootLayout = FrameLayout(this).apply {
+        rootLayout = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -138,34 +148,32 @@ class IptvPlayerActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Replaced old helper with a Jetpack Compose dialog layer
+     */
     private fun showTrackOptionsDialog() {
-        val options = arrayOf("Audio Tracks", "Subtitles")
-        AlertDialog.Builder(this)
-            .setTitle("Select Track Type")
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> showAudioTracksDialog()
-                    1 -> showTextTracksDialog()
+        // If a dialog is already showing, do not stack another one
+        if (composeDialogView != null) return
+
+        val activePlayer = player ?: return
+
+        composeDialogView = ComposeView(this).apply {
+            setContent {
+                MaterialTheme {
+                    TabbedTrackSelectionDialog(
+                        player = activePlayer,
+                        onDismissRequest = { dismissComposeDialog() }
+                    )
                 }
             }
-            .show()
-    }
-
-    private fun showAudioTracksDialog() {
-        player?.let {
-            TrackSelectionDialogBuilder(this, "Audio Tracks", it, C.TRACK_TYPE_AUDIO)
-                .setShowDisableOption(false)
-                .build()
-                .show()
         }
+        rootLayout.addView(composeDialogView)
     }
 
-    private fun showTextTracksDialog() {
-        player?.let {
-            TrackSelectionDialogBuilder(this, "Subtitles", it, C.TRACK_TYPE_TEXT)
-                .setShowDisableOption(true)
-                .build()
-                .show()
+    private fun dismissComposeDialog() {
+        composeDialogView?.let {
+            rootLayout.removeView(it)
+            composeDialogView = null
         }
     }
 
@@ -230,11 +238,16 @@ class IptvPlayerActivity : ComponentActivity() {
         player?.release()
         player = null
         playerView = null
+        composeDialogView = null
     }
     
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        showExitConfirmationDialog()
+        if (composeDialogView != null) {
+            dismissComposeDialog()
+        } else {
+            showExitConfirmationDialog()
+        }
     }
     
     private fun showExitConfirmationDialog() {
@@ -251,3 +264,166 @@ class IptvPlayerActivity : ComponentActivity() {
     }
 }
 
+// ==========================================
+// COMPOSE COMPONENTS FOR TRACK DIALOG
+// ==========================================
+
+@Composable
+fun TabbedTrackSelectionDialog(
+    player: ExoPlayer,
+    onDismissRequest: () -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabs = listOf("Video", "Audio", "Subtitles")
+    val currentTracks by remember { mutableStateOf(player.currentTracks) }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text("Close")
+            }
+        },
+        title = { Text(text = "Media Settings") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                TabRow(selectedTabIndex = selectedTab) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = { Text(title) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                when (selectedTab) {
+                    0 -> VideoTrackList(player, currentTracks)
+                    1 -> GenericTrackList(player, currentTracks, C.TRACK_TYPE_AUDIO)
+                    2 -> GenericTrackList(player, currentTracks, C.TRACK_TYPE_TEXT)
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun VideoTrackList(player: ExoPlayer, tracks: Tracks) {
+    val groups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+    
+    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+        item {
+            val isAutoSelected = !player.trackSelectionParameters.overrides.containsKey(C.TRACK_TYPE_VIDEO)
+            TrackSelectionRow(
+                title = "Auto (Adjusts to stream)",
+                isSelected = isAutoSelected,
+                onClick = {
+                    player.trackSelectionParameters = player.trackSelectionParameters
+                        .buildUpon()
+                        .clearOverrideForType(C.TRACK_TYPE_VIDEO)
+                        .build()
+                }
+            )
+        }
+        groups.forEach { group ->
+            itemsIndexed(List(group.length) { it }) { _, trackIndex ->
+                val format = group.getTrackFormat(trackIndex)
+                val isSelected = group.isTrackSelected(trackIndex)
+                val resolution = if (format.width > 0 && format.height > 0) {
+                    "${format.width}x${format.height}"
+                } else if (format.height > 0) {
+                    "${format.height}p"
+                } else {
+                    "Unknown"
+                }
+                val speedLabel = if (format.bitrate > 0) {
+                    val mbps = format.bitrate / 1_000_000f
+                    if (mbps >= 1f) String.format("%.1f Mbps", mbps) else "${format.bitrate / 1_000} Kbps"
+                } else ""
+                val displayTitle = if (speedLabel.isNotEmpty()) "$resolution — $speedLabel" else resolution
+                TrackSelectionRow(
+                    title = displayTitle,
+                    isSelected = isSelected,
+                    onClick = {
+                        val override = TrackSelectionOverride(group.mediaTrackGroup, trackIndex)
+                        player.trackSelectionParameters = player.trackSelectionParameters
+                            .buildUpon()
+                            .setOverrideForType(C.TRACK_TYPE_VIDEO, override)
+                            .build()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun GenericTrackList(player: ExoPlayer, tracks: Tracks, @C.TrackType trackType: Int) {
+    val groups = tracks.groups.filter { it.type == trackType }
+    
+    LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+        item {
+            val isAutoSelected = !player.trackSelectionParameters.overrides.containsKey(trackType)
+            val isTextDisabled = trackType == C.TRACK_TYPE_TEXT && 
+                player.trackSelectionParameters.getTrackTypeDisabled(C.TRACK_TYPE_TEXT)
+            val isSelected = if (trackType == C.TRACK_TYPE_TEXT) isTextDisabled else isAutoSelected
+            val disabledText = if (trackType == C.TRACK_TYPE_TEXT) "None (Turn off subtitles)" else "Auto (Default)"
+            
+            TrackSelectionRow(
+                title = disabledText,
+                isSelected = isSelected,
+                onClick = {
+                    val builder = player.trackSelectionParameters.buildUpon()
+                    builder.clearOverrideForType(trackType)
+                    if (trackType == C.TRACK_TYPE_TEXT) {
+                        builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    }
+                    player.trackSelectionParameters = builder.build()
+                }
+            )
+        }
+        
+        groups.forEach { group ->
+            itemsIndexed(List(group.length) { it }) { _, trackIndex ->
+                val format = group.getTrackFormat(trackIndex)
+                val isSelected = group.isTrackSelected(trackIndex)
+                val trackName = if (!format.language.isNullOrEmpty()) {
+                    format.language.uppercase()
+                } else {
+                    "Track ${trackIndex + 1}"
+                }
+                
+                TrackSelectionRow(
+                    title = trackName,
+                    isSelected = isSelected,
+                    onClick = {
+                        val builder = player.trackSelectionParameters.buildUpon()
+                        if (trackType == C.TRACK_TYPE_TEXT) {
+                            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        }
+                        val override = TrackSelectionOverride(group.mediaTrackGroup, trackIndex)
+                        builder.setOverrideForType(trackType, override)
+                        player.trackSelectionParameters = builder.build()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TrackSelectionRow(title: String, isSelected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = isSelected, onClick = onClick)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+    }
+}
