@@ -31,6 +31,7 @@ import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.MoviesScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.MyListScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.TvShowsScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.LiveTvScreen
+import com.kiduyuk.klausk.kiduyutv.ui.player.iptv.IptvPlayerActivity
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SearchViewModelFactory
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SearchViewModel
 
@@ -161,12 +162,17 @@ fun NavGraph(navController: NavHostController) {
 
         // Live TV Screen: Screen for live TV channels.
         composable(Screen.LiveTv.route) {
+            val context = LocalContext.current
             LiveTvScreen(
-                onMovieClick = { movieId ->
-                    navController.navigate(Screen.MovieDetail.createRoute(movieId))
-                },
-                onTvShowClick = { tvId ->
-                    navController.navigate(Screen.TvShowDetail.createRoute(tvId))
+                onChannelPlay = { channel ->
+                    // Start the IPTV player activity
+                    val intent = IptvPlayerActivity.createIntent(
+                        context = context,
+                        channelName = channel.name,
+                        streamUrl = channel.url,
+                        channelLogo = channel.logo
+                    )
+                    context.startActivity(intent)
                 },
                 onNavigate = { route ->
                     if (route != Screen.LiveTv.route) {
