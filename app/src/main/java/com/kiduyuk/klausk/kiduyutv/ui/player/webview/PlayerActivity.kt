@@ -251,17 +251,32 @@ class PlayerActivity : AppCompatActivity() {
 
         val repository = TmdbRepository()
 
-        // Detect device type — cursor disabled only on mobile/tablet
+        // Detect device type and show appropriate toast with device information
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
+        val deviceManufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val deviceModel = Build.MODEL
+        val deviceBrand = Build.BRAND.replaceFirstChar { it.uppercase() }
+
         if (uiModeManager.currentModeType != Configuration.UI_MODE_TYPE_TELEVISION) {
             isCursorDisabled = true
-            Log.i(TAG, "[Device] Mobile/Tablet detected, disabling cursor")
-            Toast.makeText(this, "Device: Mobile / Tablet", Toast.LENGTH_SHORT).show()
+            val deviceType = if (uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_NORMAL) "Mobile" else "Tablet"
+            Log.i(TAG, "[Device] $deviceType detected (${deviceBrand} $deviceModel), disabling cursor")
+
+            // Show detailed toast for mobile/tablet devices
+            val toastMessage = "Device: $deviceType\nBrand: $deviceBrand | Model: $deviceModel"
+            Toast.makeText(this, toastMessage, Toast.LENGTH_LONG).show()
         } else {
             isFireTV = Build.MANUFACTURER.equals("Amazon", ignoreCase = true)
-            Log.i(TAG, "[Device] TV detected, cursor enabled, isFireTV=$isFireTV")
-            val deviceLabel = if (isFireTV) "Fire TV (AmazonWebView)" else "Android TV (WebView)"
-            Toast.makeText(this, "Device: $deviceLabel", Toast.LENGTH_SHORT).show()
+            Log.i(TAG, "[Device] TV detected (${deviceBrand} $deviceModel), cursor enabled, isFireTV=$isFireTV")
+
+            // Show detailed toast for TV devices
+            val deviceLabel = if (isFireTV) {
+                "Fire TV (Amazon WebView)"
+            } else {
+                "Android TV (WebView)"
+            }
+            val toastMessage = "Device: $deviceLabel\nBrand: $deviceBrand | Model: $deviceModel"
+            Toast.makeText(this, toastMessage, Toast.LENGTH_LONG).show()
         }
 
         val existsInHistory = repository.isInWatchHistory(this, tmdbId, isTv)
