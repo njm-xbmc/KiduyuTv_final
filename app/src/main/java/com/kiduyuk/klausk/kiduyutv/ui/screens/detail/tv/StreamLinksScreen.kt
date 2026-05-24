@@ -300,18 +300,21 @@ fun StreamProviderItem(
                     style = MaterialTheme.typography.titleMedium
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 
-                    when (provider.name) {
-                        "Vidsync", "EmbedMaster", "Autoembed", "VidSrc (WTF) v1" -> Tag("may show black screen on firetv devices", Color(0xFFFFC107), Color.Black)
-                        else -> Tag("FAST", Color(0xFF4CAF50), Color.White)
-                    }
-                    
-                    // HIGH SPEED tag for providers 1-9
-                    if (provider.name in highSpeedProviders) {
-                        Tag("HIGH SPEED", Color(0xFF2196F3), Color.White)
+                    // Row 1: FAST / warning + HIGH SPEED
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        when (provider.name) {
+                            "Vidsync", "EmbedMaster", "Autoembed", "VidSrc (WTF) v1" -> Tag("may show black screen on firetv devices", Color(0xFFFFC107), Color.Black)
+                            else -> Tag("FAST", Color(0xFF4CAF50), Color.White)
+                        }
+
+                        if (provider.name in highSpeedProviders) {
+                            Tag("HIGH SPEED", Color(0xFF2196F3), Color.White)
+                        }
                     }
 
+                    // Row 2: yellow label tag (if any)
                     when (provider.name) {
                         "Videasy" -> Tag("BEST FOR TV", Color(0xFFFFC107), Color.Black)
                         "VidLink" -> Tag("BEST FOR MOVIES", Color(0xFFFFC107), Color.Black)
@@ -340,3 +343,4 @@ fun Tag(text: String, bg: Color, fg: Color) {
         Text(text, color = fg, style = MaterialTheme.typography.labelSmall)
     }
 }
+
