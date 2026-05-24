@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -78,6 +79,22 @@ class PlayerActivity : AppCompatActivity() {
     private var latestContentId: Int = -1
 
     private var originalStreamUrl: String = ""
+
+    /**
+     * Check if the device is an Amazon Fire TV or Fire Stick.
+     * Uses two methods for maximum compatibility:
+     * 1. Checks for amazon.hardware.fire_tv system feature
+     * 2. Falls back to checking if Build.MODEL starts with "AFT"
+     */
+    private fun isFireTVDevice(context: Context): Boolean {
+        // Check for Amazon's system feature identifier
+        val isFireTvHardware = context.packageManager.hasSystemFeature("amazon.hardware.fire_tv")
+        
+        // Fallback: Check if the Build.MODEL starts with "AFT" (used by Fire TVs and Fire Sticks)
+        val isFireTvModel = Build.MODEL != null && Build.MODEL.startsWith("AFT", ignoreCase = true)
+        
+        return isFireTvHardware || isFireTvModel
+    }
 
     companion object {
         private const val TAG = "VideasyPlayer"
@@ -277,7 +294,7 @@ class PlayerActivity : AppCompatActivity() {
                 Toast.makeText(this@PlayerActivity, toastMessage, Toast.LENGTH_LONG).show()
             }
         } else {
-            isFireTV = Build.MANUFACTURER.equals("Amazon", ignoreCase = true)
+            isFireTV = isFireTVDevice(this)
             Log.i(TAG, "[Device] TV detected (${deviceBrand} $deviceModel), cursor enabled, isFireTV=$isFireTV")
 
             // Show detailed toast for TV devices
@@ -391,31 +408,9 @@ class PlayerActivity : AppCompatActivity() {
                     Log.i(TAG, "[WebView] Page finished loading with AdBlocker")
                     injectVideoDetectionScript(this)
                     injectAdvancedPlayerScripts(this)
-                    injectAutoplayScript(this)
-                    forceAutoplayOnPageLoad(this)
-                    verifyAutoplaySuccess()
                     
-                    // Force WebView update after delays
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        forceWebViewUpdate()
-                    }, 500)
-                    
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        forceWebViewUpdate()
-                        webView.evaluateJavascript(
-                            """
-                            (function() {
-                                var videos = document.querySelectorAll('video');
-                                videos.forEach(function(video) {
-                                    if (!video.paused) {
-                                        var event = new Event('timeupdate');
-                                        video.dispatchEvent(event);
-                                    }
-                                });
-                            })();
-                            """.trimIndent(), null
-                        )
-                    }, 2000)
+                    // Run autoplay injection 3 times, every 4 seconds with WebView updates
+                    runAutoplayWithRetry(3, 4000, this)
                 },
                 onError = {
                     hasPageError = true
@@ -1622,6 +1617,69 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
         }, 5000)
+    }
+
+    /**
+     * Run autoplay injection multiple times with intervals and WebView updates.
+     * This ensures the video player is properly initialized and started.
+     * 
+     * @param maxAttempts Number of times to run autoplay (default: 3)
+     * @param intervalMs Interval between attempts in milliseconds (default: 4000ms)
+     * @param view The WebView instance to inject scripts into
+     */
+    private fun runAutoplayWithRetry(maxAttempts: Int = 3, intervalMs: Long = 4000, view: WebView?) {
+        var currentAttempt = 0
+        
+        fun runAttempt() {
+            if (currentAttempt >= maxAttempts) {
+                Log.i(TAG, "[Autoplay] All $maxAttempts attempts completed")
+                verifyAutoplaySuccess()
+                return
+            }
+            
+            currentAttempt++
+            Log.i(TAG, "[Autoplay] Running attempt $currentAttempt of $maxAttempts")
+            
+            // Inject autoplay scripts
+            injectAutoplayScript(view)
+            forceAutoplayOnPageLoad(view)
+            
+            // Force WebView update to ensure UI reflects the injected scripts
+            forceWebViewUpdate()
+            
+            // Dispatch events to update the WebView state
+            view?.evaluateJavascript(
+                """
+                (function() {
+                    var videos = document.querySelectorAll('video');
+                    videos.forEach(function(video) {
+                        if (!video.paused) {
+                            video.dispatchEvent(new Event('playing'));
+                            video.dispatchEvent(new Event('timeupdate'));
+                            video.dispatchEvent(new Event('progress'));
+                        }
+                    });
+                    window.dispatchEvent(new Event('resize'));
+                })();
+                """.trimIndent(), null
+            )
+            
+            // Schedule next attempt if not the last one
+            if (currentAttempt < maxAttempts) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    runAttempt()
+                }, intervalMs)
+            } else {
+                // After final attempt, verify and do final WebView update
+                Handler(Looper.getMainLooper()).postDelayed({
+                    verifyAutoplaySuccess()
+                    forceWebViewUpdate()
+                }, 2000)
+            }
+        }
+        
+        // Start the first attempt immediately
+        runAttempt()
     }
 
     private fun setupImmersiveMode() {
