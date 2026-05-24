@@ -8,7 +8,7 @@ data class StreamProvider(
     val movieUrlTemplate: String,
     val tvUrlTemplate: String,
     val iframeAttributes: Map<String, String> = emptyMap(),
-    val allowAttributes: String = "autoplay; fullscreen; encrypted-media; picture-in-picture",
+    val allowAttributes: String = "autoplay; encrypted-media; picture-in-picture",
     val movieParameters: (tmdbId: Int, timestamp: Long) -> Map<String, String> = { _, _ -> emptyMap() },
     val tvParameters: (tmdbId: Int, season: Int, episode: Int, timestamp: Long) -> Map<String, String> = { _, _, _, _ -> emptyMap() }
 )
@@ -20,7 +20,7 @@ object StreamProviderManager {
 
     val providers = listOf(
         // ═══════════════════════════════════════════════════════════════
-        // 1. Videasy - with frameborder and allowfullscreen
+        // 1. Videasy - with frameborder
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "Videasy",
@@ -28,7 +28,6 @@ object StreamProviderManager {
             tvUrlTemplate = "https://player.videasy.net/tv/%d/%d/%d",
             iframeAttributes = mapOf(
                 "frameborder" to "0",
-                "allowfullscreen" to "",
                 "allow" to "encrypted-media"
             ),
             movieParameters = { _, timestamp ->
@@ -50,15 +49,14 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 2. VidLink - with frameborder and allowfullscreen
+        // 2. VidLink - with frameborder
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "VidLink",
             movieUrlTemplate = "https://vidlink.pro/movie/%d",
             tvUrlTemplate = "https://vidlink.pro/tv/%d/%d/%d",
             iframeAttributes = mapOf(
-                "frameborder" to "0",
-                "allowfullscreen" to ""
+                "frameborder" to "0"
             ),
             movieParameters = { _, timestamp ->
                 val params = mutableMapOf("autoPlay" to "true")
@@ -116,7 +114,7 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 5. VidNest - with frameborder, allowfullscreen, and custom movieParameters
+        // 5. VidNest - with frameborder
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "VidNest",
@@ -124,8 +122,7 @@ object StreamProviderManager {
             tvUrlTemplate = "https://vidnest.fun/tv/%d/%d/%d",
             iframeAttributes = mapOf(
                 "scrolling" to "no",
-                "frameBorder" to "0",
-                "allowfullscreen" to ""
+                "frameBorder" to "0"
             ),
             movieParameters = { _, timestamp ->
                 val params = mutableMapOf(
@@ -256,8 +253,7 @@ object StreamProviderManager {
             movieUrlTemplate = "https://embed.smashystream.com/playere.php?tmdb=%d",
             tvUrlTemplate = "https://embed.smashystream.com/playere.php?tmdb=%d&season=%d&episode=%d",
             iframeAttributes = mapOf(
-                "frameborder" to "0",
-                "allowfullscreen" to ""
+                "frameborder" to "0"
             ),
             movieParameters = { _, timestamp ->
                 val params = mutableMapOf<String, String>()
@@ -279,8 +275,7 @@ object StreamProviderManager {
             movieUrlTemplate = "https://111movies.com/movie/%d",
             tvUrlTemplate = "https://111movies.com/tv/%d/%d/%d",
             iframeAttributes = mapOf(
-                "frameborder" to "0",
-                "allowfullscreen" to ""
+                "frameborder" to "0"
             ),
             movieParameters = { _, timestamp ->
                 val params = mutableMapOf<String, String>()
@@ -398,7 +393,6 @@ object StreamProviderManager {
                 <iframe 
                     id="player-frame"
                     src="$finalUrl" 
-                    allowfullscreen 
                     $attrString>
                 </iframe>
                 <script>
