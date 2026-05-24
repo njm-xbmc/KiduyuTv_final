@@ -211,7 +211,7 @@ class LiveTvViewModel : ViewModel() {
         } else {
             allChannels.filter { channel ->
                 channel.name.contains(query, ignoreCase = true) ||
-                channel.category?.contains(query, ignoreCase = true) == true
+                channel.group?.contains(query, ignoreCase = true) == true
             }
         }
 

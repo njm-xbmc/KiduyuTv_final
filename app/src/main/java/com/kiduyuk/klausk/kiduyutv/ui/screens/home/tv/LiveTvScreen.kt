@@ -472,8 +472,7 @@ private fun SearchInputField(
                 shape = RoundedCornerShape(12.dp)
             )
             .focusable(
-                interactionSource = interactionSource,
-                indication = null
+                interactionSource = interactionSource
             )
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
