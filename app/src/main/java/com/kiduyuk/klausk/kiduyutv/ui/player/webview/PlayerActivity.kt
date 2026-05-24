@@ -714,11 +714,7 @@ class PlayerActivity : AppCompatActivity() {
                         video.setAttribute('muted', 'false');
                         video.volume = 1.0;
                         video.muted = false;
-                        
-                        if (video.paused) {
-                            video.play().catch(function(e) {});
-                        }
-                        
+
                         video.addEventListener('volumechange', function() {
                             if (video.volume < 1.0 || video.muted) {
                                 if (video.hasAttribute('muted')) {
