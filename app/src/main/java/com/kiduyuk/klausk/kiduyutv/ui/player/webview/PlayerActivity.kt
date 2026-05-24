@@ -1822,7 +1822,7 @@ class PlayerActivity : AppCompatActivity() {
      * For Fire TV, hardware and software acceleration is enabled for optimal video playback.
      */
     private fun createWebView(context: Context): WebView {
-        val webView: WebView
+        var webView: WebView
         
         if (isFireTV) {
             try {
