@@ -316,7 +316,7 @@ fun VideoTrackList(player: ExoPlayer, tracks: Tracks) {
     LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
         item {
             // Use clearOverridesOfType instead of clearOverrideForType
-            val isAutoSelected = !player.trackSelectionParameters.overrides.containsKey(C.TRACK_TYPE_VIDEO)
+            val isAutoSelected = player.trackSelectionParameters.overrides.values.none { it.type == C.TRACK_TYPE_VIDEO }
             TrackSelectionRow(
                 title = "Auto (Adjusts to stream)",
                 isSelected = isAutoSelected,
@@ -363,13 +363,13 @@ fun VideoTrackList(player: ExoPlayer, tracks: Tracks) {
 }
 
 @Composable
-fun GenericTrackList(player: ExoPlayer, tracks: Tracks, @C.TrackType trackType: Int) {
+fun GenericTrackList(player: ExoPlayer, tracks: Tracks, trackType: Int) {
     val groups = tracks.groups.filter { it.type == trackType }
     
     LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
         item {
             // Use isDisabled instead of getTrackTypeDisabled
-            val isAutoSelected = !player.trackSelectionParameters.overrides.containsKey(trackType)
+            val isAutoSelected = player.trackSelectionParameters.overrides.values.none { it.type == trackType }
             val isTextDisabled = trackType == C.TRACK_TYPE_TEXT && 
                 player.trackSelectionParameters.disabledTrackTypes.contains(trackType)
             

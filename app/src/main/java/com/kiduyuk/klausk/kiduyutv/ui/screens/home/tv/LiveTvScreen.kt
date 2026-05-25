@@ -502,7 +502,7 @@ private fun SearchInputField(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            TextField(
+            androidx.compose.foundation.text.BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
                 textStyle = TextStyle(
@@ -515,28 +515,19 @@ private fun SearchInputField(
                     imeAction = ImeAction.Search,
                     autoCorrect = false
                 ),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedSupportingTextColor = TextSecondary,
-                    unfocusedSupportingTextColor = TextSecondary
-                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
                     .focusable(),
-                placeholder = {
-                    Text(
-                        text = "Type channel name to search...",
-                        color = TextSecondary,
-                        fontSize = 16.sp
-                    )
+                decorationBox = { innerTextField ->
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Type channel name to search...",
+                            color = TextSecondary,
+                            fontSize = 16.sp
+                        )
+                    }
+                    innerTextField()
                 }
             )
 
