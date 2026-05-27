@@ -26,8 +26,9 @@
             android:id="@+id/btnBack"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_button_tv"
             android:contentDescription="Back"
+            android:focusable="true"
             android:src="@drawable/ic_arrow_back"
             app:tint="#FFFFFF" />
 
@@ -60,8 +61,9 @@
             android:id="@+id/btnInfo"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_button_tv"
             android:contentDescription="Info"
+            android:focusable="true"
             android:src="@drawable/ic_info_outline"
             app:tint="#FFFFFF" />
     </LinearLayout>
@@ -90,56 +92,61 @@
             android:id="@+id/overlayControls"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#55000000">
+            android:background="#55000000"
+            android:descendantFocusability="afterDescendants"
+            android:focusable="true"
+            android:focusableInTouchMode="true">
 
             <!-- Lock button – top right -->
             <ImageButton
                 android:id="@+id/btnLock"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_gravity="top|end"
                 android:layout_marginTop="8dp"
-                android:layout_marginEnd="8dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Lock"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Lock / Unlock overlay"
+                android:focusable="true"
                 android:src="@drawable/ic_lock_open"
                 app:tint="#FFFFFF" />
 
-            <!-- Skip +15 s – left-centre -->
+            <!-- Channel Up – left-centre -->
             <ImageButton
                 android:id="@+id/btnSkipForward"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
                 android:layout_gravity="center_vertical|start"
-                android:layout_marginStart="20dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Skip forward 15 seconds"
+                android:layout_marginStart="24dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Channel up"
+                android:focusable="true"
                 android:src="@drawable/ic_forward_15"
                 app:tint="#FFFFFF" />
 
-            <!-- Next / right-arrow – right centre -->
+            <!-- Next Channel – right-centre -->
             <ImageButton
                 android:id="@+id/btnNext"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
                 android:layout_gravity="center_vertical|end"
-                android:layout_marginTop="-80dp"
-                android:layout_marginEnd="4dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Next"
+                android:layout_marginEnd="24dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Next channel"
+                android:focusable="true"
                 android:src="@drawable/ic_chevron_right"
                 app:tint="#FFFFFF" />
 
-            <!-- Playlist / episodes – right, below next -->
+            <!-- Channel List – below next button -->
             <ImageButton
                 android:id="@+id/btnPlaylist"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="center_vertical|end"
-                android:layout_marginTop="20dp"
-                android:layout_marginEnd="4dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Episode list"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center"
+                android:layout_marginTop="80dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Channel list"
+                android:focusable="true"
                 android:src="@drawable/ic_menu"
                 app:tint="#FFFFFF" />
 
@@ -150,16 +157,19 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom"
                 android:background="#44000000"
+                android:focusable="true"
                 android:orientation="vertical"
-                android:paddingBottom="4dp">
+                android:paddingBottom="6dp"
+                android:paddingTop="6dp">
 
                 <!-- Seek bar -->
                 <SeekBar
                     android:id="@+id/seekBar"
                     android:layout_width="match_parent"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="8dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:focusable="true"
                     android:max="100"
                     android:progress="85"
                     android:progressTint="#FFFFFF"
@@ -167,21 +177,27 @@
 
                 <!-- Playback controls row -->
                 <LinearLayout
+                    android:id="@+id/bottomControlsRow"
                     android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:gravity="end|center_vertical"
-                    android:paddingEnd="8dp">
+                    android:layout_height="52dp"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp">
 
                     <!-- Fill / Fit toggle -->
                     <TextView
                         android:id="@+id/btnFill"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="16dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:clickable="true"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="@drawable/selector_button_tv"
                         android:focusable="true"
-                        android:padding="4dp"
+                        android:gravity="center"
+                        android:minWidth="76dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
                         android:text="Fill"
                         android:textColor="#FFFFFF"
                         android:textSize="14sp"
@@ -190,54 +206,59 @@
                     <!-- Closed Captions -->
                     <ImageButton
                         android:id="@+id/btnCC"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:layout_marginEnd="8dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:background="@drawable/selector_button_tv"
                         android:contentDescription="Closed captions"
+                        android:focusable="true"
                         android:src="@drawable/ic_closed_caption"
                         app:tint="#FFFFFF" />
 
                     <!-- Settings -->
                     <ImageButton
                         android:id="@+id/btnSettings"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:layout_marginEnd="8dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:background="@drawable/selector_button_tv"
                         android:contentDescription="Settings"
+                        android:focusable="true"
                         android:src="@drawable/ic_settings"
                         app:tint="#FFFFFF" />
 
                     <!-- Volume -->
                     <ImageButton
                         android:id="@+id/btnVolume"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:layout_marginEnd="8dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:background="@drawable/selector_button_tv"
                         android:contentDescription="Volume"
+                        android:focusable="true"
                         android:src="@drawable/ic_volume_up"
                         app:tint="#FFFFFF" />
 
                     <!-- Cast / screen mirror -->
                     <ImageButton
                         android:id="@+id/btnCast"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
                         android:layout_marginEnd="8dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:background="@drawable/selector_button_tv"
                         android:contentDescription="Cast"
+                        android:focusable="true"
                         android:src="@drawable/ic_cast"
                         app:tint="#FFFFFF" />
 
                     <!-- Picture-in-Picture -->
                     <ImageButton
                         android:id="@+id/btnPip"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/selector_button_tv"
                         android:contentDescription="Picture in picture"
+                        android:focusable="true"
                         android:src="@drawable/ic_picture_in_picture"
                         app:tint="#FFFFFF" />
 
@@ -264,8 +285,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
+            android:background="@drawable/selector_button_tv"
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical">
@@ -292,8 +312,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
+            android:background="@drawable/selector_button_tv"
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical">
@@ -321,8 +340,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
+            android:background="@drawable/selector_button_tv"
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical">
@@ -349,8 +367,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
+            android:background="@drawable/selector_button_tv"
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical">
@@ -377,8 +394,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
+            android:background="@drawable/selector_button_tv"
             android:focusable="true"
             android:gravity="center"
             android:orientation="vertical">

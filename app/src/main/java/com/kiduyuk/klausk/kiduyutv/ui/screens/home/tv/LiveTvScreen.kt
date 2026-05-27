@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.kiduyuk.klausk.kiduyutv.data.model.IptvChannel
@@ -70,7 +71,7 @@ fun LiveTvScreen(
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onNotificationClick: (id: Int, type: String) -> Unit = { _, _ -> },
-    viewModel: LiveTvViewModel = remember { LiveTvViewModel() }
+    viewModel: LiveTvViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -485,7 +486,6 @@ private fun SearchInputField(
                 color = if (isFocused) PrimaryRed else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
-            .focusable(interactionSource = interactionSource)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -515,10 +515,10 @@ private fun SearchInputField(
                     imeAction = ImeAction.Search,
                     autoCorrect = false
                 ),
+                interactionSource = interactionSource,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .focusable(),
+                    .weight(1f)
+                    .focusRequester(focusRequester),
                 decorationBox = { innerTextField ->
                     if (query.isEmpty()) {
                         Text(
