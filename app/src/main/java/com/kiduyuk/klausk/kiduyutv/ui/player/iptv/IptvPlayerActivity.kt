@@ -23,15 +23,23 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.WindowCompat
@@ -68,6 +76,9 @@ class IptvPlayerActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "IptvPlayerActivity"
+        // Keep TAG for potential logging in future releases
+        @Suppress("UNUSED")
+        private val isDebugEnabled = false
 
         const val EXTRA_CHANNEL_NAME = "channel_name"
         const val EXTRA_STREAM_URL   = "stream_url"
@@ -714,23 +725,56 @@ fun TabbedTrackSelectionDialog(
     onDismissRequest: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(initialTab) }
+    val closeInteractionSource = remember { MutableInteractionSource() }
+    val isCloseFocused by closeInteractionSource.collectIsFocusedAsState()
     val tabs = listOf("Video", "Audio", "Subtitles")
     val currentTracks = player.currentTracks
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
-            TextButton(onClick = onDismissRequest) { Text("Close") }
+            TextButton(
+                onClick = onDismissRequest,
+                modifier = Modifier
+                    .background(
+                        color = if (isCloseFocused) Color(0xFF448AFF).copy(alpha = 0.3f) else Color.Transparent,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Close",
+                    color = if (isCloseFocused) Color(0xFF448AFF) else Color.White
+                )
+            }
         },
-        title = { Text("Media Settings") },
+        title = {
+            Text(
+                text = "Media Settings",
+                color = Color.White
+            )
+        },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                TabRow(selectedTabIndex = selectedTab) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusable()
+            ) {
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color(0xFF1E1E1E),
+                    contentColor = Color.White
+                ) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
                             selected = selectedTab == index,
                             onClick  = { selectedTab = index },
-                            text     = { Text(title) }
+                            text     = {
+                                Text(
+                                    text = title,
+                                    color = if (selectedTab == index) Color(0xFF448AFF) else Color.White
+                                )
+                            }
                         )
                     }
                 }
@@ -741,7 +785,8 @@ fun TabbedTrackSelectionDialog(
                     2 -> GenericTrackList(player, currentTracks, C.TRACK_TYPE_TEXT)
                 }
             }
-        }
+        },
+        containerColor = Color(0xFF2D2D2D)
     )
 }
 
@@ -841,15 +886,44 @@ fun GenericTrackList(player: ExoPlayer, tracks: Tracks, trackType: Int) {
 
 @Composable
 fun TrackSelectionRow(title: String, isSelected: Boolean, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp),
+            .then(
+                if (isFocused) {
+                    Modifier.background(
+                        color = Color(0xFF448AFF).copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 10.dp, horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = isSelected, onClick = onClick)
+        RadioButton(
+            selected = isSelected,
+            onClick = onClick,
+            interactionSource = interactionSource,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = Color(0xFF448AFF),
+                unselectedColor = Color.White
+            )
+        )
         Spacer(modifier = Modifier.width(8.dp))
-        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (isFocused) Color(0xFF448AFF) else Color.White
+        )
     }
 }
