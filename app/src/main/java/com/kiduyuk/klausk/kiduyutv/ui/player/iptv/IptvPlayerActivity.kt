@@ -91,7 +91,7 @@ class IptvPlayerActivity : AppCompatActivity() {
         const val EXTRA_TVG_NAME = "tvg_name"
         const val EXTRA_GROUP = "group"
 
-        private const val OVERLAY_HIDE_DELAY_MS = 4_000L
+        private const val OVERLAY_HIDE_DELAY_MS = 5_000L //
         private const val SEEK_POLL_MS          =   500L
         private const val PROGRAM_UPDATE_MS     = 60_000L // Update program info every minute
 
@@ -288,6 +288,97 @@ class IptvPlayerActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (event == null) return super.onKeyDown(keyCode, event)
+
+        when (keyCode) {
+            // ── Show/Hide Controls ──────────────────────────────────────────────
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER -> {
+                if (isLocked) return true
+                if (!isOverlayVisible) {
+                    showOverlay()
+                } else {
+                    // Toggle visibility on repeated press
+                    hideOverlay()
+                }
+                return true
+            }
+
+            // ── Playback Controls ──────────────────────────────────────────────
+            KeyEvent.KEYCODE_MEDIA_PLAY,
+            KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                togglePlayPause()
+                return true
+            }
+
+            // ── Mute/Unmute ────────────────────────────────────────────────────
+            KeyEvent.KEYCODE_MUTE,
+            KeyEvent.KEYCODE_VOLUME_MUTE -> {
+                toggleMute()
+                return true
+            }
+
+            // ── Volume Controls (optional - also toggle mute) ──────────────────
+            KeyEvent.KEYCODE_VOLUME_UP,
+            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                if (isMuted) {
+                    toggleMute()
+                }
+                // Let system handle volume adjustment
+                return false
+            }
+        }
+
+        return super.onKeyDown(keyCode, event)
+    }
+
+    /**
+     * Toggles play/pause state and shows brief feedback.
+     */
+    private fun togglePlayPause() {
+        player?.let { p ->
+            if (p.isPlaying) {
+                p.pause()
+                showPlaybackStateIndicator(false)
+            } else {
+                p.play()
+                showPlaybackStateIndicator(true)
+            }
+        }
+    }
+
+    /**
+     * Toggles mute/unmute state.
+     */
+    private fun toggleMute() {
+        isMuted = !isMuted
+        player?.volume = if (isMuted) 0f else 1f
+        btnVolume.setImageResource(
+            if (isMuted) R.drawable.ic_volume_off else R.drawable.ic_volume_up
+        )
+        showMuteStateIndicator(isMuted)
+        if (isOverlayVisible) scheduleHideOverlay()
+    }
+
+    /**
+     * Shows a brief toast indicator for playback state changes.
+     */
+    private fun showPlaybackStateIndicator(isPlaying: Boolean) {
+        val message = if (isPlaying) "▶ Playing" else "⏸ Paused"
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Shows a brief toast indicator for mute state changes.
+     */
+    private fun showMuteStateIndicator(isMuted: Boolean) {
+        val message = if (isMuted) "🔇 Muted" else "🔊 Unmuted"
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
     @Deprecated("Use onBackPressedDispatcher")
     override fun onBackPressed() {
 
@@ -439,7 +530,7 @@ class IptvPlayerActivity : AppCompatActivity() {
         }
     }
 
-private fun showOverlay() {
+    private fun showOverlay() {
         if (isLocked) return
         isOverlayVisible = true
 
@@ -467,13 +558,13 @@ private fun showOverlay() {
             return
         }
         isOverlayVisible = false
-        
+
         // Hide top bar
         topBar.animate().alpha(0f).setDuration(500).withEndAction {
             topBar.visibility = View.GONE
             topBar.alpha = 1f // Reset alpha for next show
         }.start()
-        
+
         // Hide overlay controls
         overlayControls.animate().alpha(0f).setDuration(500).withEndAction {
             overlayControls.visibility = View.INVISIBLE

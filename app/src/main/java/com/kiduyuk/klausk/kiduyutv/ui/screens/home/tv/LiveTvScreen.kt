@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -325,9 +326,21 @@ private fun SearchContent(
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
 
+    // Track current IME action based on keyboard type
+    var currentImeAction by remember { mutableStateOf(ImeAction.Search) }
+
     // Request focus on search field when screen opens
     LaunchedEffect(Unit) {
         searchFocusRequester.requestFocus()
+    }
+
+    // Handle IME action submission
+    val handleImeAction: (String) -> Unit = { query ->
+        // Trigger search when IME action is pressed
+        if (query.isNotBlank()) {
+            // Already searched via onValueChange, just clear focus
+            focusManager.clearFocus()
+        }
     }
 
     Column(
@@ -397,7 +410,9 @@ private fun SearchContent(
                 // Keep focus after clearing
                 searchFocusRequester.requestFocus()
             },
-            focusRequester = searchFocusRequester
+            onImeAction = handleImeAction,
+            focusRequester = searchFocusRequester,
+            imeAction = currentImeAction
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -472,7 +487,9 @@ private fun SearchInputField(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
-    focusRequester: FocusRequester
+    onImeAction: (String) -> Unit,
+    focusRequester: FocusRequester,
+    imeAction: ImeAction = ImeAction.Search
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -514,8 +531,13 @@ private fun SearchInputField(
                 cursorBrush = SolidColor(PrimaryRed),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search,
+                    imeAction = imeAction,
                     autoCorrect = false
+                ),
+                keyboardActions = KeyboardActions(
+                    onSearch = { onImeAction(query) },
+                    onNext = { onImeAction(query) },
+                    onDone = { onImeAction(query) }
                 ),
                 interactionSource = interactionSource,
                 modifier = Modifier
