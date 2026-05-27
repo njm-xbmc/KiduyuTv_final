@@ -165,12 +165,15 @@ fun NavGraph(navController: NavHostController) {
             val context = LocalContext.current
             LiveTvScreen(
                 onChannelPlay = { channel ->
-                    // Start the IPTV player activity
+                    // Start the IPTV player activity with EPG metadata
                     val intent = IptvPlayerActivity.createIntent(
                         context = context,
                         channelName = channel.name,
                         streamUrl = channel.url,
-                        channelLogo = channel.logo
+                        channelLogo = channel.logo,
+                        tvgId = channel.tvgId,
+                        tvgName = channel.tvgName,
+                        group = channel.group
                     )
                     context.startActivity(intent)
                 },

@@ -80,6 +80,8 @@ fun LiveTvScreen(
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
         viewModel.loadPlaylist()
+        // Pre-load EPG data for program info
+        viewModel.loadEpg()
     }
 
     // Handle channel selection for playback

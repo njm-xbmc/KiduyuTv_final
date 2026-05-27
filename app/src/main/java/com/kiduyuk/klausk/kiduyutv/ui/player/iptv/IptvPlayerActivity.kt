@@ -56,7 +56,13 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.kiduyuk.klausk.kiduyutv.R
+import com.kiduyuk.klausk.kiduyutv.data.model.ChannelProgramInfo
+import com.kiduyuk.klausk.kiduyutv.data.model.IptvChannel
+import com.kiduyuk.klausk.kiduyutv.data.repository.IptvRepository
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * IPTV Player Activity — uses activity_player.xml layout.
@@ -80,20 +86,30 @@ class IptvPlayerActivity : AppCompatActivity() {
         const val EXTRA_CHANNEL_NAME = "channel_name"
         const val EXTRA_STREAM_URL   = "stream_url"
         const val EXTRA_CHANNEL_LOGO = "channel_logo"
+        const val EXTRA_TVG_ID = "tvg_id"
+        const val EXTRA_TVG_NAME = "tvg_name"
+        const val EXTRA_GROUP = "group"
 
         private const val OVERLAY_HIDE_DELAY_MS = 4_000L
         private const val SEEK_POLL_MS          =   500L
+        private const val PROGRAM_UPDATE_MS     = 60_000L // Update program info every minute
 
         /** Open this player from anywhere in the app. */
         fun createIntent(
             context: Context,
             channelName: String,
             streamUrl: String,
-            channelLogo: String? = null
+            channelLogo: String? = null,
+            tvgId: String? = null,
+            tvgName: String? = null,
+            group: String? = null
         ) = Intent(context, IptvPlayerActivity::class.java).apply {
             putExtra(EXTRA_CHANNEL_NAME, channelName)
             putExtra(EXTRA_STREAM_URL,   streamUrl)
             putExtra(EXTRA_CHANNEL_LOGO, channelLogo)
+            putExtra(EXTRA_TVG_ID, tvgId)
+            putExtra(EXTRA_TVG_NAME, tvgName)
+            putExtra(EXTRA_GROUP, group)
         }
     }
 
@@ -132,15 +148,24 @@ class IptvPlayerActivity : AppCompatActivity() {
     private lateinit var btnCast: ImageButton
     private lateinit var btnPip: ImageButton
 
-    // ── State ────────────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────────────────
 
     private var channelName = "Live TV"
     private var streamUrl   = ""
+    private var channelLogo: String? = null
+    private var tvgId: String? = null
+    private var tvgName: String? = null
+    private var channelGroup: String? = null
+
+    // EPG Program info
+    private var currentProgramTitle: String? = null
+    private var currentProgramTime: String? = null
+    private var nextProgramTitle: String? = null
 
     private var isOverlayVisible = true
     private var isLocked         = false
     private var isFillMode       = true
-private var isMuted = false
+    private var isMuted = false
 
     // Compose dialog overlay (track selector or any other sheet)
     private var composeDialogView: ComposeView? = null
@@ -157,6 +182,14 @@ private var isMuted = false
         }
     }
 
+    private val programUpdateHandler = Handler(Looper.getMainLooper())
+    private val programUpdateRunnable = object : Runnable {
+        override fun run() {
+            loadEpgProgram()
+            programUpdateHandler.postDelayed(this, PROGRAM_UPDATE_MS)
+        }
+    }
+
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -164,6 +197,10 @@ private var isMuted = false
 
         channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: "Live TV"
         streamUrl   = intent.getStringExtra(EXTRA_STREAM_URL)   ?: ""
+        channelLogo = intent.getStringExtra(EXTRA_CHANNEL_LOGO)
+        tvgId = intent.getStringExtra(EXTRA_TVG_ID)
+        tvgName = intent.getStringExtra(EXTRA_TVG_NAME)
+        channelGroup = intent.getStringExtra(EXTRA_GROUP)
 
         if (streamUrl.isBlank()) { finish(); return }
 
@@ -182,6 +219,9 @@ private var isMuted = false
         wireOverlayButtons()
         wireLiveSeekBar()
         initPlayer()
+
+        // Load initial EPG program info
+        loadEpgProgram()
     }
 
     override fun onStart() {
@@ -189,6 +229,7 @@ private var isMuted = false
         player?.play()
         seekHandler.post(seekRunnable)
         scheduleHideOverlay()
+        programUpdateHandler.post(programUpdateRunnable)
     }
 
     override fun onResume() {
@@ -206,6 +247,7 @@ private var isMuted = false
         player?.pause()
         seekHandler.removeCallbacks(seekRunnable)
         hideHandler.removeCallbacks(hideRunnable)
+        programUpdateHandler.removeCallbacks(programUpdateRunnable)
     }
 
     override fun onDestroy() {
@@ -294,7 +336,85 @@ private var isMuted = false
     }
 
     private fun showChannelInfo() {
-        Toast.makeText(this, "Stream: $streamUrl", Toast.LENGTH_LONG).show()
+        val info = buildString {
+            appendLine("Channel: $channelName")
+            tvgId?.let { appendLine("TVG ID: $it") }
+            tvgName?.let { appendLine("TVG Name: $it") }
+            channelGroup?.let { appendLine("Group: $it") }
+            appendLine("Stream: $streamUrl")
+            if (currentProgramTitle != null) {
+                appendLine()
+                appendLine("Now Playing: $currentProgramTitle")
+                currentProgramTime?.let { appendLine("Time: $it") }
+            }
+            nextProgramTitle?.let { appendLine("Up Next: $it") }
+        }
+        Toast.makeText(this, info, Toast.LENGTH_LONG).show()
+    }
+
+    // ── EPG Program Loading ──────────────────────────────────────────────────
+
+    /**
+     * Loads current program info from EPG for the current channel.
+     * Runs on IO dispatcher and updates UI on main thread.
+     */
+    private fun loadEpgProgram() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val channel = IptvChannel(
+                    name = channelName,
+                    logo = channelLogo,
+                    url = streamUrl,
+                    group = channelGroup,
+                    tvgId = tvgId,
+                    tvgName = tvgName
+                )
+
+                val programInfo = IptvRepository.getInstance()
+                    .getChannelProgramInfo(channel, this@IptvPlayerActivity)
+
+                val now = System.currentTimeMillis()
+                val current = programInfo.currentProgram
+                val next = programInfo.nextProgram
+
+                val programTitle = current?.title
+                val programTime = if (current != null) {
+                    "${formatTime(current.startTime)} - ${formatTime(current.endTime)}"
+                } else null
+
+                val upcomingTitle = next?.title
+
+                // Update UI on main thread
+                CoroutineScope(Dispatchers.Main).launch {
+                    currentProgramTitle = programTitle
+                    currentProgramTime = programTime
+                    nextProgramTitle = upcomingTitle
+
+                    // Update the top bar with program info
+                    if (programTitle != null) {
+                        tvLiveBadge.text = "● $programTitle"
+                        tvLiveBadge.setTextColor(0xFFFF4444.toInt())
+                    } else {
+                        tvLiveBadge.text = "● LIVE"
+                        tvLiveBadge.setTextColor(0xFFFF4444.toInt())
+                    }
+                }
+            } catch (e: Exception) {
+                // Silently fail - EPG is optional
+            }
+        }
+    }
+
+    /**
+     * Formats Unix timestamp to readable time string (HH:mm).
+     */
+    private fun formatTime(timestamp: Long): String {
+        if (timestamp <= 0) return ""
+        val calendar = java.util.Calendar.getInstance()
+        calendar.timeInMillis = timestamp
+        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = calendar.get(java.util.Calendar.MINUTE)
+        return String.format("%02d:%02d", hour, minute)
     }
 
     // ── Overlay show/hide ────────────────────────────────────────────────────
