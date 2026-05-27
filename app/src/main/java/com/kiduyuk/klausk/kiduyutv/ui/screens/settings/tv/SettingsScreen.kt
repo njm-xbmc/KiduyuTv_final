@@ -83,6 +83,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import com.kiduyuk.klausk.kiduyutv.ui.screens.trakt.TraktAuthActivity
+import kotlinx.coroutines.delay
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Root Screen
@@ -103,15 +104,15 @@ fun SettingsScreen(
     var selectedSection by remember { mutableStateOf(SettingsSection.ACCOUNT) }
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    
+
     // Focus management for TV
     val accountNavFocusRequester = remember { FocusRequester() }
-    
+
     // Request focus on Account section when screen loads
     LaunchedEffect(Unit) {
         accountNavFocusRequester.requestFocus()
     }
-    
+
     // Auth state from AuthManager - These StateFlows are automatically updated when
     // AuthManager.init() restores persisted login in KiduyuTvApp.onCreate()
     // The UI will recompose automatically when these values change
@@ -120,7 +121,7 @@ fun SettingsScreen(
     val userEmail by AuthManager.userEmail.collectAsState()
     val userPhotoUrl by AuthManager.userPhotoUrl.collectAsState()
     val isAuthLoading by AuthManager.isLoading.collectAsState()
-    
+
     // Force recomposition when screen becomes visible to ensure account state is current
     // This handles the case where persisted login was restored before navigating to Settings
     LaunchedEffect(Unit) {
@@ -128,7 +129,7 @@ fun SettingsScreen(
         // which restores persisted login and updates StateFlows
         // StateFlows will trigger recomposition automatically when values change
     }
-    
+
     var showPhoneLoginDialog by remember { mutableStateOf(false) }
 
     if (showPhoneLoginDialog) {
@@ -170,38 +171,38 @@ fun SettingsScreen(
                 .background(SurfaceDark)
                 .padding(32.dp)
         ) {
-                when (selectedSection) {
-                    SettingsSection.ACCOUNT -> {
-                        AccountContent(
-                            isSignedIn = isSignedIn,
-                            displayName = userDisplayName ?: "User",
-                            email = userEmail ?: "",
-                            photoUrl = userPhotoUrl,
-                            isLoading = isAuthLoading,
-                            onSignInClick = { showPhoneLoginDialog = true },
-                            onSignOutClick = {
-                                QuitDialog(
-                                    context = context,
-                                    title = "Sign Out?",
-                                    message = "Are you sure you want to sign out of your account?",
-                                    positiveButtonText = "Sign Out",
-                                    negativeButtonText = "Cancel",
-                                    lottieAnimRes = R.raw.exit,
-                                    onNo = {},
-                                    onYes = {
-                                        AuthManager.signOut {
-                                            // Handle sign out - UI will auto-update via StateFlow
-                                        }
+            when (selectedSection) {
+                SettingsSection.ACCOUNT -> {
+                    AccountContent(
+                        isSignedIn = isSignedIn,
+                        displayName = userDisplayName ?: "User",
+                        email = userEmail ?: "",
+                        photoUrl = userPhotoUrl,
+                        isLoading = isAuthLoading,
+                        onSignInClick = { showPhoneLoginDialog = true },
+                        onSignOutClick = {
+                            QuitDialog(
+                                context = context,
+                                title = "Sign Out?",
+                                message = "Are you sure you want to sign out of your account?",
+                                positiveButtonText = "Sign Out",
+                                negativeButtonText = "Cancel",
+                                lottieAnimRes = R.raw.exit,
+                                onNo = {},
+                                onYes = {
+                                    AuthManager.signOut {
+                                        // Handle sign out - UI will auto-update via StateFlow
                                     }
-                                ).show()
-                            },
-                            onDeleteAccountClick = {
-                                // Handle delete account
-                            }
-                        )
-                    }
+                                }
+                            ).show()
+                        },
+                        onDeleteAccountClick = {
+                            // Handle delete account
+                        }
+                    )
+                }
 
-                    SettingsSection.APP_SETTINGS -> {
+                SettingsSection.APP_SETTINGS -> {
                     AppSettingsContent(
                         context = context,
                         isSignedIn = isSignedIn,
@@ -288,6 +289,28 @@ fun SettingsScreen(
                                 negativeButtonText = "Cancel",
                                 lottieAnimRes = R.raw.exit,
                                 onYes = { viewModel.clearWatchHistory() }
+                            ).show()
+                        },
+                        // Live TV
+                        playlistUrl = uiState.playlistUrl,
+                        epgUrl = uiState.epgUrl,
+                        isUpdatingLiveTv = uiState.isUpdatingLiveTv,
+                        liveTvUpdateSuccess = uiState.liveTvUpdateSuccess,
+                        liveTvUpdateError = uiState.liveTvUpdateError,
+                        isClearingLiveTvCache = uiState.isClearingLiveTvCache,
+                        liveTvClearSuccess = uiState.liveTvClearSuccess,
+                        onPlaylistUrlChange = { viewModel.updatePlaylistUrl(it) },
+                        onEpgUrlChange = { viewModel.updateEpgUrl(it) },
+                        onUpdateLiveTvClick = { viewModel.updateLiveTvData(context) },
+                        onClearLiveTvCacheClick = {
+                            QuitDialog(
+                                context = context,
+                                title = "Clear Live TV Cache?",
+                                message = "Are you sure you want to clear the saved Live TV playlist and EPG data? This action cannot be undone.",
+                                positiveButtonText = "Clear",
+                                negativeButtonText = "Cancel",
+                                lottieAnimRes = R.raw.exit,
+                                onYes = { viewModel.clearLiveTvCache(context) }
                             ).show()
                         },
                         // Firebase Sync
@@ -411,7 +434,7 @@ private fun SettingsSidebar(
     modifier: Modifier = Modifier
 ) {
     val sidebarScrollState = rememberScrollState()
-    
+
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -569,6 +592,18 @@ private fun AppSettingsContent(
     isClearingWatchHistory: Boolean,
     watchHistoryClearSuccess: Boolean,
     onClearWatchHistoryClick: () -> Unit,
+    // Live TV
+    playlistUrl: String,
+    epgUrl: String,
+    isUpdatingLiveTv: Boolean,
+    liveTvUpdateSuccess: Boolean,
+    liveTvUpdateError: String?,
+    isClearingLiveTvCache: Boolean,
+    liveTvClearSuccess: Boolean,
+    onPlaylistUrlChange: (String) -> Unit,
+    onEpgUrlChange: (String) -> Unit,
+    onUpdateLiveTvClick: () -> Unit,
+    onClearLiveTvCacheClick: () -> Unit,
     // Firebase Sync
     isFirebaseSyncing: Boolean = false,
     firebaseSyncProgress: Int = 0,
@@ -726,6 +761,26 @@ private fun AppSettingsContent(
             onClick = onClearWatchHistoryClick
         )
 
+        Spacer(modifier = Modifier.height(28.dp))
+
+
+        // ── Live TV ──────────────────────────────────────────
+        SettingsSectionLabel(text = "Live TV")
+
+        LiveTvSettingsCard(
+            playlistUrl = playlistUrl,
+            epgUrl = epgUrl,
+            isUpdatingLiveTv = isUpdatingLiveTv,
+            updateSuccess = liveTvUpdateSuccess,
+            updateError = liveTvUpdateError,
+            isClearingCache = isClearingLiveTvCache,
+            clearSuccess = liveTvClearSuccess,
+            onPlaylistUrlChange = onPlaylistUrlChange,
+            onEpgUrlChange = onEpgUrlChange,
+            onUpdateClick = onUpdateLiveTvClick,
+            onClearCacheClick = onClearLiveTvCacheClick
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
@@ -745,7 +800,7 @@ private fun AppInformationContent(
     onWebsiteClick: () -> Unit
 ) {
     val contentScrollState = rememberScrollState()
-    
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1285,6 +1340,7 @@ private fun SettingsActionCard(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
+
             Text(
                 text = description,
                 color = TextSecondary,
@@ -1361,6 +1417,320 @@ private fun SettingsActionCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Card component for Live TV settings with URL inputs and action buttons.
+ */
+@Composable
+private fun LiveTvSettingsCard(
+    playlistUrl: String,
+    epgUrl: String,
+    isUpdatingLiveTv: Boolean,
+    updateSuccess: Boolean,
+    updateError: String?,
+    isClearingCache: Boolean,
+    clearSuccess: Boolean,
+    onPlaylistUrlChange: (String) -> Unit,
+    onEpgUrlChange: (String) -> Unit,
+    onUpdateClick: () -> Unit,
+    onClearCacheClick: () -> Unit
+) {
+    var playlistText by remember { mutableStateOf(playlistUrl) }
+    var epgText by remember { mutableStateOf(epgUrl) }
+
+
+    // Update local state when prop changes
+    LaunchedEffect(playlistUrl) {
+        playlistText = playlistUrl
+    }
+    LaunchedEffect(epgUrl) {
+        epgText = epgUrl
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(CardDark)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Description
+        Text(
+            text = "Configure your Live TV playlist and EPG (TV guide) data by providing URLs to M3U playlist and XMLTV EPG files.",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            lineHeight = 20.sp
+        )
+
+        // Playlist URL input
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Playlist URL (M3U)",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            UrlInputField(
+                value = playlistText,
+                onValueChange = {
+                    playlistText = it
+                    onPlaylistUrlChange(it)
+                },
+                placeholder = "https://example.com/playlist.m3u"
+            )
+        }
+
+        // EPG URL input
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "EPG URL (XMLTV)",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            UrlInputField(
+                value = epgText,
+                onValueChange = {
+                    epgText = it
+                    onEpgUrlChange(it)
+                },
+                placeholder = "https://example.com/epg.xml"
+            )
+        }
+
+        // Buttons row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Update/Save button
+            val updateInteractionSource = remember { MutableInteractionSource() }
+            val isUpdateFocused by updateInteractionSource.collectIsFocusedAsState()
+
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        when {
+                            isUpdatingLiveTv -> PrimaryRed.copy(alpha = 0.5f)
+                            isUpdateFocused -> PrimaryRed.copy(alpha = 0.8f)
+                            else -> PrimaryRed
+                        }
+                    )
+                    .border(
+                        width = if (isUpdateFocused) 2.dp else 0.dp,
+                        color = if (isUpdateFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable(
+                        interactionSource = updateInteractionSource,
+                        indication = null,
+                        enabled = !isUpdatingLiveTv,
+                        onClick = onUpdateClick
+                    )
+                    .focusable(interactionSource = updateInteractionSource),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (isUpdatingLiveTv) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = "Updating...",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Update,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Update & Save",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // Clear Cache button
+            val clearInteractionSource = remember { MutableInteractionSource() }
+            val isClearFocused by clearInteractionSource.collectIsFocusedAsState()
+
+            Box(
+                modifier = Modifier
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        when {
+                            isClearingCache -> TextTertiary.copy(alpha = 0.5f)
+                            isClearFocused -> TextTertiary.copy(alpha = 0.8f)
+                            else -> TextTertiary.copy(alpha = 0.3f)
+                        }
+                    )
+                    .border(
+                        width = if (isClearFocused) 2.dp else 1.dp,
+                        color = if (isClearFocused) PrimaryRed else Color.Transparent,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable(
+                        interactionSource = clearInteractionSource,
+                        indication = null,
+                        enabled = !isClearingCache,
+                        onClick = onClearCacheClick
+                    )
+                    .focusable(interactionSource = clearInteractionSource)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (isClearingCache) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = TextPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = TextPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Text(
+                        text = if (isClearingCache) "Clearing..." else "Clear Cache",
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        // Status messages
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (updateSuccess) {
+                Text(
+                    text = "Live TV data updated successfully!",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            if (clearSuccess) {
+                Text(
+                    text = "Cache cleared!",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        if (!updateError.isNullOrBlank()) {
+            Text(
+                text = updateError,
+                color = Color(0xFFFF6B6B),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Reusable URL input field with focus support for TV navigation.
+ */
+@Composable
+private fun UrlInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                when {
+                    isFocused -> SurfaceDark
+                    else -> CardDark.copy(alpha = 0.5f)
+                }
+            )
+            .border(
+                width = if (isFocused) 2.dp else 1.dp,
+                color = when {
+                    isFocused -> DarkRed.copy(alpha = 0.6f)
+                    else -> TextTertiary.copy(alpha = 0.2f)
+                },
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    keyboardController?.show()
+                }
+            )
+            .focusable(interactionSource = interactionSource)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = TextPrimary,
+                fontSize = 14.sp
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri
+            ),
+            singleLine = true,
+            decorationBox = { innerTextField ->
+                Box {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            color = TextTertiary,
+                            fontSize = 14.sp
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
     }
 }
 
@@ -1603,27 +1973,27 @@ private fun AccountSignInCard(
                 modifier = Modifier.size(32.dp)
             )
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = "Not signed in",
             color = TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         Text(
             text = "Sign in with your phone to sync your data across devices",
             color = TextSecondary,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         // Sign in with Phone button
         Box(
             modifier = Modifier
@@ -1681,7 +2051,7 @@ private fun AccountSignedInCard(
 ) {
     val signOutInteractionSource = remember { MutableInteractionSource() }
     val isSignOutFocused by signOutInteractionSource.collectIsFocusedAsState()
-    
+
     val deleteInteractionSource = remember { MutableInteractionSource() }
     val isDeleteFocused by deleteInteractionSource.collectIsFocusedAsState()
 
@@ -1714,9 +2084,9 @@ private fun AccountSignedInCard(
                 fontWeight = FontWeight.Medium
             )
         }
-        
+
         Spacer(modifier = Modifier.height(20.dp))
-        
+
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1755,9 +2125,9 @@ private fun AccountSignedInCard(
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.width(24.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = displayName,
@@ -1773,16 +2143,16 @@ private fun AccountSignedInCard(
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         HorizontalDivider(
             color = TextTertiary.copy(alpha = 0.15f),
             thickness = 1.dp
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         // Account info section
         Text(
             text = "Account Info",
@@ -1790,23 +2160,23 @@ private fun AccountSignedInCard(
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
         )
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         AccountInfoRow(
             icon = Icons.Default.Login,
             label = "Signed in via",
             value = "Phone Authorization"
         )
-        
+
         AccountInfoRow(
             icon = Icons.Default.Refresh,
             label = "Data syncing",
             value = "Enabled"
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         // Sign out button
         Box(
             modifier = Modifier
@@ -1843,9 +2213,9 @@ private fun AccountSignedInCard(
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.height(12.dp))
-        
+
         // Delete account button
         Box(
             modifier = Modifier
@@ -2093,7 +2463,7 @@ private fun PhoneLoginCodeDialog(
                         letterSpacing = 6.sp
                     )
                 }
-            
+
 
                 Spacer(modifier = Modifier.height(24.dp))
 
