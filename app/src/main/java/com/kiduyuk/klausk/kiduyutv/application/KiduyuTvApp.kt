@@ -1,5 +1,6 @@
-package com.kiduyuk.klausk.kiduyutv
+package com.kiduyuk.klausk.kiduyutv.application
 
+import android.util.Log
 import androidx.multidex.MultiDexApplication
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -7,19 +8,19 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
 import coil.util.DebugLogger
+import com.google.firebase.analytics.FirebaseAnalytics
+import com.google.firebase.database.FirebaseDatabase
 import com.kiduyuk.klausk.kiduyutv.data.api.ApiClient
 import com.kiduyuk.klausk.kiduyutv.data.local.database.DatabaseManager
 import com.kiduyuk.klausk.kiduyutv.data.repository.MyListManager
-import com.kiduyuk.klausk.kiduyutv.util.AdvancedAdBlocker
 import com.kiduyuk.klausk.kiduyutv.network.AndroidApp
 import com.kiduyuk.klausk.kiduyutv.network.NetworkConnectivityChecker
-import com.kiduyuk.klausk.kiduyutv.util.NotificationHelper
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.database.FirebaseDatabase
 import com.kiduyuk.klausk.kiduyutv.util.AdManager
-import com.kiduyuk.klausk.kiduyutv.util.FirebaseManager
-import com.kiduyuk.klausk.kiduyutv.util.SettingsManager
+import com.kiduyuk.klausk.kiduyutv.util.AdvancedAdBlocker
 import com.kiduyuk.klausk.kiduyutv.util.AuthManager
+import com.kiduyuk.klausk.kiduyutv.util.FirebaseManager
+import com.kiduyuk.klausk.kiduyutv.util.NotificationHelper
+import com.kiduyuk.klausk.kiduyutv.util.SettingsManager
 
 /**
  * A Custom Application class for KiduyuTv.
@@ -54,7 +55,7 @@ class KiduyuTvApp : MultiDexApplication(), ImageLoaderFactory {
 
         // 1. Initialize AuthManager FIRST to restore persisted login from SharedPreferences
         // This ensures isSignedIn and currentUid are populated before Firebase services start
-        android.util.Log.i("KiduyuTvApp", "Initializing AuthManager...")
+        Log.i("KiduyuTvApp", "Initializing AuthManager...")
         AuthManager.init(this, webClientId = "109926033937-dsl207opc1lsa3fnonim2sfmnc0o9hjk.apps.googleusercontent.com")
 
         // 2. Determine the correct user ID (authenticated UID or device ID)
@@ -63,18 +64,18 @@ class KiduyuTvApp : MultiDexApplication(), ImageLoaderFactory {
         val isSignedIn = AuthManager.isSignedIn.value
         val currentUid = AuthManager.currentUser?.uid ?: AuthManager.currentUid
         val deviceId = SettingsManager(this).getDeviceId()
-        
+
         val userId = if (isSignedIn && currentUid != null) {
-            android.util.Log.i("KiduyuTvApp", "User is signed in (persisted login restored). Using UID: $currentUid")
+            Log.i("KiduyuTvApp", "User is signed in (persisted login restored). Using UID: $currentUid")
             currentUid
         } else {
-            android.util.Log.i("KiduyuTvApp", "User not signed in. Using device ID: $deviceId")
+            Log.i("KiduyuTvApp", "User not signed in. Using device ID: $deviceId")
             deviceId
         }
 
         // 3. Initialize FirebaseManager with the correct user ID
         FirebaseManager.init(userId)
-        android.util.Log.i("KiduyuTvApp", "FirebaseManager initialized with userId: $userId")
+        Log.i("KiduyuTvApp", "FirebaseManager initialized with userId: $userId")
 
         // Initialize AndroidApp reference for singleton access
         AndroidApp.instance = this
@@ -135,4 +136,3 @@ class KiduyuTvApp : MultiDexApplication(), ImageLoaderFactory {
             .build()
     }
 }
-
