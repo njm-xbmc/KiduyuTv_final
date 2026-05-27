@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.os.HandlerCompat.postDelayed
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -124,6 +125,7 @@ class IptvPlayerActivity : AppCompatActivity() {
     private lateinit var rootLayout: ConstraintLayout
 
     // Top bar
+    private lateinit var topBar: View
     private lateinit var tvChannelName: TextView   // reuses @id/tvDate
     private lateinit var tvLiveBadge: TextView     // reuses @id/tvTime
     private lateinit var btnBack: ImageButton
@@ -301,6 +303,7 @@ class IptvPlayerActivity : AppCompatActivity() {
 
     private fun bindViews() {
         rootLayout      = findViewById(R.id.rootLayout)
+        topBar         = findViewById(R.id.topBar)
 
         btnBack         = findViewById(R.id.btnBack)
         tvChannelName   = findViewById(R.id.tvDate)      // repurposed
@@ -322,6 +325,11 @@ class IptvPlayerActivity : AppCompatActivity() {
         btnVolume       = findViewById(R.id.btnVolume)
         btnCast         = findViewById(R.id.btnCast)
         btnPip          = findViewById(R.id.btnPip)
+
+        // Set up D-pad focus chain - request initial focus on btnFill (first control in bottom row)
+        btnFill.isFocusable = true
+        btnFill.isFocusableInTouchMode = true
+        btnFill.requestFocus()
     }
 
     // ── Top bar ──────────────────────────────────────────────────────────────
@@ -431,12 +439,21 @@ class IptvPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun showOverlay() {
+private fun showOverlay() {
         if (isLocked) return
         isOverlayVisible = true
+
+        topBar.animate().alpha(1f).setDuration(200).withStartAction {
+            topBar.visibility = View.VISIBLE
+        }.start()
+
         overlayControls.animate().alpha(1f).setDuration(200).withStartAction {
             overlayControls.visibility = View.VISIBLE
+        }.withEndAction {
+            // Use the view's own post — NOT hideHandler — to avoid racing the hide timer
+            btnFill.post { btnFill.requestFocus() }
         }.start()
+
         scheduleHideOverlay()
     }
 
@@ -450,8 +467,17 @@ class IptvPlayerActivity : AppCompatActivity() {
             return
         }
         isOverlayVisible = false
+        
+        // Hide top bar
+        topBar.animate().alpha(0f).setDuration(300).withEndAction {
+            topBar.visibility = View.INVISIBLE
+            topBar.alpha = 1f // Reset alpha for next show
+        }.start()
+        
+        // Hide overlay controls
         overlayControls.animate().alpha(0f).setDuration(300).withEndAction {
             overlayControls.visibility = View.INVISIBLE
+            overlayControls.alpha = 1f // Reset alpha for next show
         }.start()
     }
 

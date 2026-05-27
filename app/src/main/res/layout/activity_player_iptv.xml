@@ -18,6 +18,7 @@
         android:orientation="horizontal"
         android:paddingStart="8dp"
         android:paddingEnd="8dp"
+        android:descendantFocusability="afterDescendants"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -29,6 +30,8 @@
             android:background="@drawable/selector_button_tv"
             android:contentDescription="Back"
             android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusDown="@id/btnFill"
             android:src="@drawable/ic_arrow_back"
             app:tint="#FFFFFF" />
 
@@ -64,6 +67,8 @@
             android:background="@drawable/selector_button_tv"
             android:contentDescription="Info"
             android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusDown="@id/btnCC"
             android:src="@drawable/ic_info_outline"
             app:tint="#FFFFFF" />
     </LinearLayout>
@@ -84,6 +89,8 @@
             android:id="@+id/playerView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:focusable="false"
+            android:clickable="true"
             app:use_controller="false"
             app:resize_mode="fill" />
 
@@ -108,6 +115,8 @@
                 android:background="@drawable/selector_button_tv"
                 android:contentDescription="Lock / Unlock overlay"
                 android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusDown="@id/btnCC"
                 android:src="@drawable/ic_lock_open"
                 app:tint="#FFFFFF" />
 
@@ -121,6 +130,7 @@
                 android:background="@drawable/selector_button_tv"
                 android:contentDescription="Channel up"
                 android:focusable="true"
+                android:focusableInTouchMode="true"
                 android:src="@drawable/ic_forward_15"
                 app:tint="#FFFFFF" />
 
@@ -134,6 +144,7 @@
                 android:background="@drawable/selector_button_tv"
                 android:contentDescription="Next channel"
                 android:focusable="true"
+                android:focusableInTouchMode="true"
                 android:src="@drawable/ic_chevron_right"
                 app:tint="#FFFFFF" />
 
@@ -147,6 +158,7 @@
                 android:background="@drawable/selector_button_tv"
                 android:contentDescription="Channel list"
                 android:focusable="true"
+                android:focusableInTouchMode="true"
                 android:src="@drawable/ic_menu"
                 app:tint="#FFFFFF" />
 
@@ -157,7 +169,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom"
                 android:background="#44000000"
-                android:focusable="true"
+                android:focusable="false"
                 android:orientation="vertical"
                 android:paddingBottom="6dp"
                 android:paddingTop="6dp">
@@ -169,7 +181,7 @@
                     android:layout_height="28dp"
                     android:layout_marginStart="12dp"
                     android:layout_marginEnd="12dp"
-                    android:focusable="true"
+                    android:focusable="false"
                     android:max="100"
                     android:progress="85"
                     android:progressTint="#FFFFFF"
@@ -180,7 +192,7 @@
                     android:id="@+id/bottomControlsRow"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
-                    android:focusable="true"
+                    android:focusable="false"
                     android:gravity="center"
                     android:descendantFocusability="afterDescendants"
                     android:orientation="horizontal"
@@ -198,6 +210,9 @@
                         android:focusableInTouchMode="true"
                         android:gravity="center"
                         android:minWidth="76dp"
+                        android:nextFocusLeft="@id/btnPip"
+                        android:nextFocusRight="@id/btnCC"
+                        android:nextFocusUp="@id/btnBack"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:text="Fill"
@@ -215,6 +230,9 @@
                         android:contentDescription="Closed captions"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnFill"
+                        android:nextFocusRight="@id/btnSettings"
+                        android:nextFocusUp="@id/btnLock"
                         android:src="@drawable/ic_closed_caption"
                         app:tint="#FFFFFF" />
 
@@ -228,6 +246,9 @@
                         android:contentDescription="Settings"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnCC"
+                        android:nextFocusRight="@id/btnVolume"
+                        android:nextFocusUp="@id/btnLock"
                         android:src="@drawable/ic_settings"
                         app:tint="#FFFFFF" />
 
@@ -241,6 +262,9 @@
                         android:contentDescription="Volume"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnSettings"
+                        android:nextFocusRight="@id/btnCast"
+                        android:nextFocusUp="@id/btnPlaylist"
                         android:src="@drawable/ic_volume_up"
                         app:tint="#FFFFFF" />
 
@@ -254,6 +278,9 @@
                         android:contentDescription="Cast"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnVolume"
+                        android:nextFocusRight="@id/btnPip"
+                        android:nextFocusUp="@id/btnNext"
                         android:src="@drawable/ic_cast"
                         app:tint="#FFFFFF" />
 
@@ -266,6 +293,9 @@
                         android:contentDescription="Picture in picture"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnCast"
+                        android:nextFocusRight="@id/btnFill"
+                        android:nextFocusUp="@id/btnNext"
                         android:src="@drawable/ic_picture_in_picture"
                         app:tint="#FFFFFF" />
 
@@ -273,7 +303,5 @@
             </LinearLayout>
         </FrameLayout>
     </FrameLayout>
-
-    
 
 </androidx.constraintlayout.widget.ConstraintLayout>
