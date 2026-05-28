@@ -94,7 +94,7 @@ data class ScrapedChannel(
                 </style>
             </head>
             <body>
-                <iframe src="$url" allowfullscreen frameborder="0"></iframe>
+                <iframe src="$url" width="100%" height="100%" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay;" allowtransparency="true" id="thatframe"></iframe>
             </body>
             </html>
         """.trimIndent()

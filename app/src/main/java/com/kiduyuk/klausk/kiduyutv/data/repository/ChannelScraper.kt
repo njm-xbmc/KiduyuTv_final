@@ -374,7 +374,7 @@ object ChannelScraper {
                 </style>
             </head>
             <body>
-                <iframe src="$streamUrl" width="100%" height="100%" style="border:0;" allowfullscreen></iframe>
+                <iframe src="$streamUrl" width="100%" height="100%" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay;" allowtransparency="true" id="thatframe"></iframe>
             </body>
             </html>
         """.trimIndent()

@@ -315,7 +315,7 @@ class SchedulePlayerActivity : ComponentActivity() {
                 </style>
             </head>
             <body>
-                <iframe src="$streamUrl" width="100%" height="100%" style="border:0;" allowfullscreen></iframe>
+                <iframe src="$streamUrl" width="100%" height="100%" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay;" allowtransparency="true" id="thatframe"></iframe>
             </body>
             </html>
         """.trimIndent()
@@ -391,42 +391,29 @@ class SchedulePlayerActivity : ComponentActivity() {
                         })();
                     """.trimIndent(), null)
 
-                    // After 3 seconds, attempt autoplay and max volume on any video
+                    // After 3 seconds, set volume to max on any video
                     // inside the page or its nested iframes
                     Handler(Looper.getMainLooper()).postDelayed({
                         view?.evaluateJavascript("""
                             (function() {
-                                function activateVideos(doc) {
+                                function setVolumeMax(doc) {
                                     try {
                                         var videos = doc.querySelectorAll('video');
                                         videos.forEach(function(v) {
                                             v.volume = 1;
                                             v.muted = false;
-                                            if (v.paused) {
-                                                v.play().catch(function(e) {
-                                                    // Autoplay blocked â€” try muted first then unmute
-                                                    v.muted = true;
-                                                    v.play().then(function() {
-                                                        v.muted = false;
-                                                        v.volume = 1;
-                                                    }).catch(function() {});
-                                                });
-                                            } else {
-                                                v.volume = 1;
-                                                v.muted = false;
-                                            }
                                         });
                                     } catch(e) {}
                                 }
 
                                 // Target the top-level document
-                                activateVideos(document);
+                                setVolumeMax(document);
 
                                 // Target any same-origin iframes
                                 var iframes = document.querySelectorAll('iframe');
                                 iframes.forEach(function(f) {
                                     try {
-                                        if (f.contentDocument) activateVideos(f.contentDocument);
+                                        if (f.contentDocument) setVolumeMax(f.contentDocument);
                                     } catch(e) {}
                                 });
                             })();

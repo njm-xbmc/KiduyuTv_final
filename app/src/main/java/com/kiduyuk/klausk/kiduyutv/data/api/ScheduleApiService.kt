@@ -260,7 +260,7 @@ class ScheduleApiService {
                 </style>
             </head>
             <body>
-                <iframe src="$iframeUrl" allowfullscreen allow="autoplay; fullscreen"></iframe>
+                <iframe src="$iframeUrl" width="100%" height="100%" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay;" allowtransparency="true" id="thatframe"></iframe>
             </body>
             </html>
         """.trimIndent()
