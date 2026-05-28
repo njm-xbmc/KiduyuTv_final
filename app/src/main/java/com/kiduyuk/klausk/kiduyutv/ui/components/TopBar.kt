@@ -59,7 +59,7 @@ fun TopBar(
     modifier: Modifier = Modifier
 ) {
 
-    val navItems = listOf("\uD83C\uDF7F Movies", "\uD83C\uDFAC TV Shows", "\uD83D\uDDC3\uFE0F My List", "\uD83D\uDED1 LIVE TV", "\uD83D\uDCC5 Schedule")
+    val navItems = listOf("\uD83C\uDF7F Movies", "\uD83C\uDFAC TV Shows", "\uD83D\uDDC3\uFE0F My List", "\uD83D\uDED1 LIVE TV")
     var showNotificationDialog by remember { mutableStateOf(false) }
     val notifications by NotificationHelper.notifications.collectAsState()
 

@@ -84,7 +84,7 @@ class IptvRepository(
             // Fetch from network
             val request = Request.Builder()
                 .url(PLAYLIST_URL)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 LG Browser/8.0.0 WebOS.TV-2024/04.00.00 (LG; OLED65C4PUA;)")
                 .build()
             
             val response = httpClient.newCall(request).execute()
@@ -345,7 +345,7 @@ class IptvRepository(
             // Fetch from network
             val request = Request.Builder()
                 .url(PLAYLIST_EPG_URL)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 LG Browser/8.0.0 WebOS.TV-2024/04.00.00 (LG; OLED65C4PUA;)")
                 .build()
 
             val response = httpClient.newCall(request).execute()

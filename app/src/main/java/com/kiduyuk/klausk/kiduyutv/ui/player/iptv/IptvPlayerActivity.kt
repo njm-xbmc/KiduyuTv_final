@@ -52,8 +52,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
@@ -818,6 +821,8 @@ class IptvPlayerActivity : AppCompatActivity() {
 
     // ── ExoPlayer ────────────────────────────────────────────────────────────
 
+
+
     private fun initPlayer() {
         trackSelector = DefaultTrackSelector(this).apply {
             setParameters(
@@ -826,6 +831,26 @@ class IptvPlayerActivity : AppCompatActivity() {
                     .setForceLowestBitrate(false)
             )
         }
+        val customLoadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                30_000,        // Min buffer depth (Default is 50,000 but lower helps live feeds stay close to real-time)
+                60_000,        // Max buffer depth
+                2_500,         // Buffer needed to start initial playback (increase if users experience instant source errors)
+                5_000          // Buffer needed to resume playback after a network dip
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
+        // 1. Configure aggressive timeouts and a realistic User-Agent header
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .setConnectTimeoutMs(15_000) // Increase to 15 seconds for slow headers
+            .setReadTimeoutMs(15_000)
+            .setAllowCrossProtocolRedirects(true) // Crucial if your M3U references redirect across http/https
+
+        // 2. Wrap it inside the MediaSource Factory
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(httpDataSourceFactory)
 
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
@@ -833,16 +858,16 @@ class IptvPlayerActivity : AppCompatActivity() {
         player = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
             .setTrackSelector(trackSelector)
+            .setMediaSourceFactory(mediaSourceFactory) // <--- Inject network rules here
+            .setLoadControl(customLoadControl) // <--- Inject buffer constraints
             .setHandleAudioBecomingNoisy(true)
             .build()
             .also { exo ->
-                // Attach to our PlayerView (controller is driven manually)
-                playerView.player      = exo
+                playerView.player = exo
                 playerView.useController = false
                 playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                playerView.resizeMode  = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
 
-                // Configure subtitle styling (transparent background, center bottom, black text)
                 configureSubtitleStyling()
 
                 exo.setMediaItem(MediaItem.fromUri(Uri.parse(streamUrl)))
@@ -966,7 +991,7 @@ class IptvPlayerActivity : AppCompatActivity() {
             setStyle(customStyle)
 
             // Set fixed text size (16sp)
-            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16f)
+            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 26f)
         }
     }
 
