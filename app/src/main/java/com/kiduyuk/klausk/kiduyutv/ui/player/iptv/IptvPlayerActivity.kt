@@ -171,7 +171,7 @@ class IptvPlayerActivity : AppCompatActivity() {
     private var isMuted = false
 
     // D-pad navigation tracking for keeping controls visible
-    private var isDpadNavigating = false
+    //private var isDpadNavigating = false
 
     // Compose dialog overlay (track selector or any other sheet)
     private var composeDialogView: ComposeView? = null
