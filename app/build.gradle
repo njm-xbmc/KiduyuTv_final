@@ -246,6 +246,9 @@ dependencies {
 
     // For AndroidX enabled projects.
     implementation 'com.pranavpandey.android:dynamic-toasts:4.3.0'
+
+    // HTML Parsing
+    implementation 'org.jsoup:jsoup:1.18.1'
 }
 
 configurations.all {

@@ -6,11 +6,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import java.util.concurrent.TimeUnit
 
 /**
- * API service for fetching schedule data from dlhd.pk
+ * API service for fetching schedule data from dlhd.pk using Jsoup for robust parsing
  */
 class ScheduleApiService {
 
@@ -102,7 +104,7 @@ class ScheduleApiService {
     }
 
     /**
-     * Parses the schedule HTML into ScheduleDay objects
+     * Parses the schedule HTML into ScheduleDay objects using Jsoup
      *
      * @param html Raw HTML content from schedule page
      * @return List of ScheduleDay objects
@@ -111,261 +113,105 @@ class ScheduleApiService {
         val scheduleDays = mutableListOf<ScheduleDay>()
 
         try {
-            // Parse each day section
-            val dayPattern = Regex("<div class=\"schedule__day\">([\\s\\S]*?)<div class=\"schedule__day\">|$", RegexOption.IGNORE_CASE)
-            val days = dayPattern.findAll(html).toList()
+            val doc: Document = Jsoup.parse(html)
+            val dayElements = doc.select("div.schedule__day")
 
-            for (dayMatch in days) {
-                val dayHtml = dayMatch.groupValues.getOrNull(1) ?: continue
-
+            for (dayElement in dayElements) {
                 // Extract date title
-                val dateTitle = extractRegex(
-                    dayHtml,
-                    Regex("<div class=\"schedule__dayTitle\">([^<]+)</div>", RegexOption.IGNORE_CASE)
-                ) ?: "Unknown Date"
+                val dateTitle = dayElement.selectFirst("div.schedule__dayTitle")?.text() ?: "Unknown Date"
 
                 // Extract categories
-                val categories = parseCategories(dayHtml)
+                val categories = mutableListOf<ScheduleCategory>()
+                val categoryElements = dayElement.select("div.schedule__category")
+
+                for (categoryElement in categoryElements) {
+                    val categoryName = categoryElement.selectFirst("div.card__meta")?.text()?.trim() ?: "Events"
+                    
+                    // Parse events in this category
+                    val events = mutableListOf<ScheduleEvent>()
+                    val eventElements = categoryElement.select("div.schedule__event")
+
+                    for (eventElement in eventElements) {
+                        val timeElement = eventElement.selectFirst("span.schedule__time")
+                        val time = timeElement?.attr("data-time") ?: ""
+                        val displayTime = timeElement?.text() ?: ""
+                        
+                        val dataTitle = eventElement.attr("data-title")
+                        val titleElement = eventElement.selectFirst("span.schedule__eventTitle")
+                        val title = titleElement?.text() ?: dataTitle
+
+                        // Generate unique ID
+                        val id = "${title.hashCode()}_${time.hashCode()}"
+
+                        // Parse channels
+                        val channels = mutableListOf<ScheduleChannel>()
+                        val channelLinks = eventElement.select("a[data-ch]")
+
+                        for (link in channelLinks) {
+                            val href = link.attr("href")
+                            val channelTitle = link.attr("title")
+                            val dataCh = link.attr("data-ch")
+
+                            // Extract channel ID from href
+                            val channelId = extractChannelId(href) ?: "0"
+
+                            // Build full watch URL
+                            val watchUrl = when {
+                                href.startsWith("/") -> "$BASE_URL$href"
+                                !href.startsWith("http") -> "$BASE_URL/$href"
+                                else -> href
+                            }
+
+                            channels.add(ScheduleChannel(
+                                id = channelId,
+                                name = channelTitle,
+                                dataCh = dataCh,
+                                watchUrl = watchUrl
+                            ))
+                        }
+
+                        events.add(ScheduleEvent(
+                            id = id,
+                            title = title,
+                            time = time,
+                            displayTime = displayTime,
+                            dataTitle = dataTitle,
+                            channels = channels
+                        ))
+                    }
+
+                    categories.add(ScheduleCategory(categoryName, events))
+                }
 
                 scheduleDays.add(ScheduleDay(dateTitle, categories))
             }
 
-            // If no days found, try alternative parsing
-            if (scheduleDays.isEmpty()) {
-                scheduleDays.addAll(parseScheduleAlternative(html))
-            }
-
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing schedule: ${e.message}")
+            Log.e(TAG, "Error parsing schedule with Jsoup: ${e.message}")
         }
 
         return scheduleDays
     }
 
     /**
-     * Alternative parsing method for schedule HTML
-     */
-    private fun parseScheduleAlternative(html: String): List<ScheduleDay> {
-        val scheduleDays = mutableListOf<ScheduleDay>()
-
-        try {
-            // Find all schedule category headers and their content
-            val categoryPattern = Regex(
-                "<div class=\"schedule__category[^>]*>([\\s\\S]*?)(?=<div class=\"schedule__category[^>]*>|</div>\\s*<div class=\"schedule__day\">)",
-                RegexOption.IGNORE_CASE
-            )
-
-            val categories = categoryPattern.findAll(html).toList()
-            if (categories.isEmpty()) return scheduleDays
-
-            // Group categories by day (every 2-3 categories = 1 day typically)
-            val currentDay = ScheduleDay("Schedule", mutableListOf())
-
-            for (categoryMatch in categories) {
-                val categoryHtml = categoryMatch.groupValues[1]
-
-                // Check if this is a new day
-                val dateMatch = Regex("<div class=\"schedule__dayTitle\">([^<]+)</div>", RegexOption.IGNORE_CASE)
-                    .find(categoryHtml)
-
-                if (dateMatch != null) {
-                    if (currentDay.categories.isNotEmpty()) {
-                        scheduleDays.add(currentDay)
-                    }
-                    val newDay = ScheduleDay(dateMatch.groupValues[1], mutableListOf())
-                    scheduleDays.add(newDay)
-                }
-
-                // Parse category
-                val categoryName = extractRegex(
-                    categoryHtml,
-                    Regex("<div class=\"card__meta\">([^<]+)</div>", RegexOption.IGNORE_CASE)
-                ) ?: "Events"
-
-                val events = parseEvents(categoryHtml)
-                val category = ScheduleCategory(categoryName, events)
-
-                if (scheduleDays.isNotEmpty()) {
-                    val lastDay = scheduleDays.last()
-                    val updatedCategories = lastDay.categories.toMutableList()
-                    updatedCategories.add(category)
-                    scheduleDays[scheduleDays.lastIndex] = lastDay.copy(categories = updatedCategories)
-                } else {
-                    val updatedCategories = currentDay.categories.toMutableList()
-                    updatedCategories.add(category)
-                    scheduleDays.add(currentDay.copy(categories = updatedCategories))
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in alternative parsing: ${e.message}")
-        }
-
-        return scheduleDays
-    }
-
-    /**
-     * Parses category sections from day HTML
-     */
-    private fun parseCategories(dayHtml: String): List<ScheduleCategory> {
-        val categories = mutableListOf<ScheduleCategory>()
-
-        try {
-            // Match each category block
-            val categoryPattern = Regex(
-                "<div class=\"schedule__category[^>]*>([\\s\\S]*?)</div>\\s*</div>\\s*<div class=\"schedule__category|</div>\\s*</div>\\s*</div>\\s*<div class=\"schedule__day",
-                RegexOption.IGNORE_CASE
-            )
-
-            val matches = categoryPattern.findAll(dayHtml)
-
-            for (match in matches) {
-                val categoryHtml = match.groupValues[1]
-
-                // Extract category name
-                val categoryName = extractRegex(
-                    categoryHtml,
-                    Regex("<div class=\"card__meta\">([\\s\\S]*?)</div>", RegexOption.IGNORE_CASE)
-                )?.trim() ?: "Events"
-
-                // Parse events in this category
-                val events = parseEvents(categoryHtml)
-
-                categories.add(ScheduleCategory(categoryName, events))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing categories: ${e.message}")
-        }
-
-        return categories
-    }
-
-    /**
-     * Parses events from category HTML
-     */
-    private fun parseEvents(categoryHtml: String): List<ScheduleEvent> {
-        val events = mutableListOf<ScheduleEvent>()
-
-        try {
-            // Match each schedule event
-            val eventPattern = Regex(
-                "<div class=\"schedule__event[^>]*>([\\s\\S]*?)</div>\\s*</div>\\s*<div class=\"schedule__event|<div class=\"schedule__event[^>]*>([\\s\\S]*?)</div>\\s*</div>\\s*</div>\\s*</div>",
-                RegexOption.IGNORE_CASE
-            )
-
-            val matches = eventPattern.findAll(categoryHtml)
-
-            for (match in matches) {
-                val eventHtml = match.groupValues[1]
-
-                // Extract time
-                val time = extractRegex(eventHtml, Regex("<span class=\"schedule__time\"[^>]*data-time=\"([^\"]+)\"", RegexOption.IGNORE_CASE)) ?: ""
-                val displayTime = extractRegex(eventHtml, Regex("<span class=\"schedule__time\"[^>]*>([^<]+)</span>", RegexOption.IGNORE_CASE)) ?: ""
-
-                // Extract title from data-title attribute
-                val dataTitle = extractRegex(
-                    eventHtml,
-                    Regex("data-title=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
-                ) ?: ""
-
-                // Extract display title
-                val title = extractRegex(
-                    eventHtml,
-                    Regex("<span class=\"schedule__eventTitle\">([^<]+)</span>", RegexOption.IGNORE_CASE)
-                )?.replace("&amp;", "&")?.replace("&quot;", "\"")?.replace("&#039;", "'") ?: dataTitle
-
-                // Generate unique ID from title and time
-                val id = "${title.hashCode()}_${time.hashCode()}"
-
-                // Parse channels
-                val channels = parseChannels(eventHtml)
-
-                events.add(ScheduleEvent(
-                    id = id,
-                    title = title,
-                    time = time,
-                    displayTime = displayTime,
-                    dataTitle = dataTitle,
-                    channels = channels
-                ))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing events: ${e.message}")
-        }
-
-        return events
-    }
-
-    /**
-     * Parses channel links from event HTML
-     */
-    private fun parseChannels(eventHtml: String): List<ScheduleChannel> {
-        val channels = mutableListOf<ScheduleChannel>()
-
-        try {
-            // Match channel links
-            val channelPattern = Regex(
-                "<a[^>]*href=\"([^\"]+)\"[^>]*title=\"([^\"]+)\"[^>]*data-ch=\"([^\"]+)\"[^>]*>",
-                RegexOption.IGNORE_CASE
-            )
-
-            val matches = channelPattern.findAll(eventHtml)
-
-            for (match in matches) {
-                val href = match.groupValues[1]
-                val title = match.groupValues[2]
-                val dataCh = match.groupValues[3]
-
-                // Extract channel ID from href
-                val channelId = extractRegex(href, Regex("id=(\\d+)")) ?: "0"
-
-                // Build full watch URL
-                val watchUrl = if (href.startsWith("/")) {
-                    "$BASE_URL$href"
-                } else if (!href.startsWith("http")) {
-                    "$BASE_URL/$href"
-                } else {
-                    href
-                }
-
-                channels.add(ScheduleChannel(
-                    id = channelId,
-                    name = title,
-                    dataCh = dataCh,
-                    watchUrl = watchUrl
-                ))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing channels: ${e.message}")
-        }
-
-        return channels
-    }
-
-    /**
-     * Parses watch page HTML to extract player options and iframe URL
+     * Parses watch page HTML to extract player options and iframe URL using Jsoup
      */
     private fun parseWatchPage(channelId: String, html: String): ChannelWatchPage {
         val playerOptions = mutableListOf<PlayerOption>()
 
         try {
+            val doc: Document = Jsoup.parse(html)
+            
             // Parse player buttons
-            val playerBtnPattern = Regex(
-                "<button[^>]*class=\"btn player-btn[^>]*\"[^>]*data-url=\"([^\"]+)\"[^>]*title=\"([^\"]+)\"[^>]*>",
-                RegexOption.IGNORE_CASE
-            )
-
-            val matches = playerBtnPattern.findAll(html)
-
-            for (match in matches) {
-                val url = match.groupValues[1]
-                val title = match.groupValues[2]
+            val playerButtons = doc.select("button.player-btn")
+            for (button in playerButtons) {
+                val url = button.attr("data-url")
+                val title = button.attr("title")
+                val isActive = button.hasClass("is-active")
 
                 // Extract player number
-                val playerNum = extractRegex(title, Regex("PLAYER\\s*(\\d+)"))?.toIntOrNull() ?: 1
-
-                // Check if this player is active
-                val isActive = html.contains("player-btn\" class=\"btn player-btn is-active") &&
-                        html.contains("data-url=\"$url\"")
+                val playerNum = Regex("PLAYER\\s*(\\d+)", RegexOption.IGNORE_CASE)
+                    .find(title)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
 
                 playerOptions.add(PlayerOption(
                     playerNumber = playerNum,
@@ -375,28 +221,20 @@ class ScheduleApiService {
             }
 
             // Extract default iframe URL
-            val iframePattern = Regex(
-                "<iframe[^>]*id=\"playerFrame\"[^>]*src=\"([^\"]+)\"",
-                RegexOption.IGNORE_CASE
-            )
-
-            val defaultIframeUrl = extractRegex(html, iframePattern) ?: "$BASE_URL/player/stream-$channelId.php"
+            val iframe = doc.selectFirst("iframe#playerFrame")
+            val defaultIframeUrl = iframe?.attr("src") ?: "$BASE_URL/player/stream-$channelId.php"
 
             // Get channel name from page
-            val channelName = extractRegex(
-                html,
-                Regex("<title>([^<]+)</title>",
-                RegexOption.IGNORE_CASE)
-            ) ?: "Channel $channelId"
+            val channelName = doc.title().replace("Watch ", "").replace(" Live Stream", "").trim()
 
             return ChannelWatchPage(
                 channelId = channelId,
-                channelName = channelName,
+                channelName = if (channelName.isNotEmpty()) channelName else "Channel $channelId",
                 playerOptions = playerOptions,
                 defaultIframeUrl = defaultIframeUrl
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error parsing watch page: ${e.message}")
+            Log.e(TAG, "Error parsing watch page with Jsoup: ${e.message}")
             return ChannelWatchPage(
                 channelId = channelId,
                 channelName = "Channel $channelId",
@@ -408,9 +246,6 @@ class ScheduleApiService {
 
     /**
      * Generates iframe HTML for a given URL
-     *
-     * @param iframeUrl The URL to load in the iframe
-     * @return HTML string containing the iframe
      */
     fun generateIframeHtml(iframeUrl: String): String {
         return """
@@ -432,9 +267,9 @@ class ScheduleApiService {
     }
 
     /**
-     * Extracts a value from HTML using regex
+     * Helper to extract channel ID from URL
      */
-    private fun extractRegex(html: String, pattern: Regex): String? {
-        return pattern.find(html)?.groupValues?.getOrNull(1)?.trim()
+    private fun extractChannelId(url: String): String? {
+        return Regex("id=(\\d+)").find(url)?.groupValues?.getOrNull(1)
     }
 }
