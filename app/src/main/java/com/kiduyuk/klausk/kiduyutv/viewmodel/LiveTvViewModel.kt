@@ -3,6 +3,8 @@ package com.kiduyuk.klausk.kiduyutv.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kiduyuk.klausk.kiduyutv.data.model.ChannelProgramInfo
+import com.kiduyuk.klausk.kiduyutv.data.model.EpgProgram
 import com.kiduyuk.klausk.kiduyutv.data.model.IptvChannel
 import com.kiduyuk.klausk.kiduyutv.data.model.IptvPlaylist
 import com.kiduyuk.klausk.kiduyutv.data.repository.IptvRepository
@@ -15,6 +17,7 @@ import kotlinx.coroutines.launch
  * UI State for the Live TV screen.
  *
  * @param isLoading Loading state for initial playlist fetch
+ * @param isEpgLoading Loading state for EPG guide
  * @param categories List of available categories
  * @param selectedCategory Currently selected category
  * @param channels Channels in the selected category
@@ -23,9 +26,11 @@ import kotlinx.coroutines.launch
  * @param searchQuery Current search query string
  * @param searchResults Search results filtered by query
  * @param isSearchActive Whether search mode is currently active
+ * @param currentProgram Current program info for selected channel
  */
 data class LiveTvUiState(
     val isLoading: Boolean = true,
+    val isEpgLoading: Boolean = false,
     val categories: List<CategoryItem> = emptyList(),
     val selectedCategory: String? = null,
     val channels: List<IptvChannel> = emptyList(),
@@ -33,7 +38,9 @@ data class LiveTvUiState(
     val error: String? = null,
     val searchQuery: String = "",
     val searchResults: List<IptvChannel> = emptyList(),
-    val isSearchActive: Boolean = false
+    val isSearchActive: Boolean = false,
+    val currentProgram: EpgProgram? = null,
+    val nextProgram: EpgProgram? = null
 )
 
 /**
@@ -49,7 +56,7 @@ data class CategoryItem(
 
 /**
  * ViewModel for the Live TV screen.
- * Manages playlist fetching, category selection, and channel browsing.
+ * Manages playlist fetching, category selection, channel browsing, and EPG loading.
  */
 class LiveTvViewModel : ViewModel() {
     
@@ -107,6 +114,51 @@ class LiveTvViewModel : ViewModel() {
             )
         }
     }
+
+    /**
+     * Loads EPG guide data for program information.
+     * Should be called when channel is selected for playback.
+     *
+     * @param channel The channel to load EPG for
+     */
+    fun loadEpgForChannel(channel: IptvChannel) {
+        val context = appContext ?: return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isEpgLoading = true)
+
+            repository.getChannelProgramInfo(channel, context).let { programInfo ->
+                _uiState.value = _uiState.value.copy(
+                    isEpgLoading = false,
+                    currentProgram = programInfo.currentProgram,
+                    nextProgram = programInfo.nextProgram
+                )
+            }
+        }
+    }
+
+    /**
+     * Loads EPG guide data for all channels.
+     * Call on app startup to pre-cache EPG data.
+     *
+     * @param forceRefresh If true, bypasses cache and fetches from network
+     */
+    fun loadEpg(forceRefresh: Boolean = false) {
+        val context = appContext ?: return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isEpgLoading = true)
+
+            repository.fetchEpg(context, forceRefresh).fold(
+                onSuccess = {
+                    _uiState.value = _uiState.value.copy(isEpgLoading = false)
+                },
+                onFailure = {
+                    _uiState.value = _uiState.value.copy(isEpgLoading = false)
+                }
+            )
+        }
+    }
     
     /**
      * Selects a category and loads its channels.
@@ -119,7 +171,9 @@ class LiveTvViewModel : ViewModel() {
             _uiState.value = _uiState.value.copy(
                 selectedCategory = categoryName,
                 channels = channels,
-                selectedChannel = null
+                selectedChannel = null,
+                currentProgram = null,
+                nextProgram = null
             )
         }
     }
@@ -131,24 +185,49 @@ class LiveTvViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(
             selectedCategory = null,
             channels = emptyList(),
-            selectedChannel = null
+            selectedChannel = null,
+            currentProgram = null,
+            nextProgram = null
         )
     }
     
     /**
-     * Selects a channel for playback.
+     * Selects a channel for playback and loads its EPG.
      *
      * @param channel The channel to play
      */
     fun selectChannel(channel: IptvChannel) {
         _uiState.value = _uiState.value.copy(selectedChannel = channel)
+        loadEpgForChannel(channel)
     }
     
     /**
      * Clears the selected channel.
      */
     fun clearSelectedChannel() {
-        _uiState.value = _uiState.value.copy(selectedChannel = null)
+        _uiState.value = _uiState.value.copy(
+            selectedChannel = null,
+            currentProgram = null,
+            nextProgram = null
+        )
+    }
+
+    /**
+     * Gets the current program for the selected channel.
+     *
+     * @return Current EpgProgram or null
+     */
+    fun getCurrentProgram(): EpgProgram? {
+        return _uiState.value.currentProgram
+    }
+
+    /**
+     * Gets the next program for the selected channel.
+     *
+     * @return Next EpgProgram or null
+     */
+    fun getNextProgram(): EpgProgram? {
+        return _uiState.value.nextProgram
     }
     
     /**
@@ -175,6 +254,7 @@ class LiveTvViewModel : ViewModel() {
     fun clearCache(context: Context) {
         cachedPlaylist = null
         repository.clearCache(context)
+        repository.clearEpgCache(context)
     }
 
     /**

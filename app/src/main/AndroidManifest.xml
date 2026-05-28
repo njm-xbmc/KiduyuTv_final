@@ -20,7 +20,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <application
-        android:name=".KiduyuTvApp"
+        android:name=".application.KiduyuTvApp"
         android:allowBackup="true"
         android:banner="@mipmap/ic_banner_foreground"
         android:hardwareAccelerated="true"
@@ -70,6 +70,13 @@
             
         <activity
             android:name=".ui.player.iptv.IptvPlayerActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:hardwareAccelerated="true"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.KiduyuTv.Player" />
+
+        <activity
+            android:name=".ui.player.iptv.SchedulePlayerActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:hardwareAccelerated="true"
             android:screenOrientation="landscape"

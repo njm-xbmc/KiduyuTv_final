@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fitsSystemWindows="false">
+
+    <!-- ── TOP BAR ── -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:background="#000000"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:descendantFocusability="afterDescendants"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/selector_button_tv"
+            android:contentDescription="Back"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusDown="@id/btnFill"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="#FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="May 24, 2026"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="11:15 PM"
+                android:textColor="#AAAAAA"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnInfo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/selector_button_tv"
+            android:contentDescription="Info"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusDown="@id/btnCC"
+            android:src="@drawable/ic_info_outline"
+            app:tint="#FFFFFF" />
+    </LinearLayout>
+
+    <!-- ── VIDEO CONTAINER ── -->
+    <FrameLayout
+        android:id="@+id/videoContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#000000"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topBar">
+
+        <!-- Actual video surface -->
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/playerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:focusable="false"
+            android:clickable="true"
+            app:use_controller="false"
+            app:resize_mode="fill" />
+
+        <!-- ── OVERLAY CONTROLS (shown/hidden on tap) ── -->
+        <FrameLayout
+            android:id="@+id/overlayControls"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#55000000"
+            android:descendantFocusability="afterDescendants"
+            android:focusable="true"
+            android:focusableInTouchMode="true">
+
+            <!-- Lock button – top right -->
+            <ImageButton
+                android:id="@+id/btnLock"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="12dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Lock / Unlock overlay"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusDown="@id/btnCC"
+                android:src="@drawable/ic_lock_open"
+                app:tint="#FFFFFF" />
+
+            <!-- Channel Up – left-centre -->
+            <ImageButton
+                android:id="@+id/btnSkipForward"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center_vertical|start"
+                android:layout_marginStart="24dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Channel up"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:src="@drawable/ic_forward_15"
+                app:tint="#FFFFFF" />
+
+            <!-- Next Channel – right-centre -->
+            <ImageButton
+                android:id="@+id/btnNext"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center_vertical|end"
+                android:layout_marginEnd="24dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Next channel"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:src="@drawable/ic_chevron_right"
+                app:tint="#FFFFFF" />
+
+            <!-- Channel List – below next button -->
+            <ImageButton
+                android:id="@+id/btnPlaylist"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center"
+                android:layout_marginTop="80dp"
+                android:background="@drawable/selector_button_tv"
+                android:contentDescription="Channel list"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:src="@drawable/ic_menu"
+                app:tint="#FFFFFF" />
+
+            <!-- ── BOTTOM STRIP inside video ── -->
+            <LinearLayout
+                android:id="@+id/videoBottomStrip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:background="#44000000"
+                android:focusable="false"
+                android:orientation="vertical"
+                android:paddingBottom="6dp"
+                android:paddingTop="6dp">
+
+                <!-- Seek bar -->
+                <SeekBar
+                    android:id="@+id/seekBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:focusable="false"
+                    android:max="100"
+                    android:progress="85"
+                    android:progressTint="#FFFFFF"
+                    android:thumbTint="#FFFFFF" />
+
+                <!-- Playback controls row -->
+                <LinearLayout
+                    android:id="@+id/bottomControlsRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:focusable="false"
+                    android:gravity="center"
+                    android:descendantFocusability="afterDescendants"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp">
+
+                    <!-- Fill / Fit toggle -->
+                    <TextView
+                        android:id="@+id/btnFill"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="@drawable/selector_button_tv"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:minWidth="76dp"
+                        android:nextFocusLeft="@id/btnPip"
+                        android:nextFocusRight="@id/btnCC"
+                        android:nextFocusUp="@id/btnBack"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="Fill"
+                        android:textColor="#FFFFFF"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <!-- Closed Captions -->
+                    <ImageButton
+                        android:id="@+id/btnCC"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/selector_button_tv"
+                        android:contentDescription="Closed captions"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnFill"
+                        android:nextFocusRight="@id/btnSettings"
+                        android:nextFocusUp="@id/btnLock"
+                        android:src="@drawable/ic_closed_caption"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Settings -->
+                    <ImageButton
+                        android:id="@+id/btnSettings"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/selector_button_tv"
+                        android:contentDescription="Settings"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnCC"
+                        android:nextFocusRight="@id/btnVolume"
+                        android:nextFocusUp="@id/btnLock"
+                        android:src="@drawable/ic_settings"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Volume -->
+                    <ImageButton
+                        android:id="@+id/btnVolume"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/selector_button_tv"
+                        android:contentDescription="Volume"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnSettings"
+                        android:nextFocusRight="@id/btnCast"
+                        android:nextFocusUp="@id/btnPlaylist"
+                        android:src="@drawable/ic_volume_up"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Cast / screen mirror -->
+                    <ImageButton
+                        android:id="@+id/btnCast"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/selector_button_tv"
+                        android:contentDescription="Cast"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnVolume"
+                        android:nextFocusRight="@id/btnPip"
+                        android:nextFocusUp="@id/btnNext"
+                        android:src="@drawable/ic_cast"
+                        app:tint="#FFFFFF" />
+
+                    <!-- Picture-in-Picture -->
+                    <ImageButton
+                        android:id="@+id/btnPip"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/selector_button_tv"
+                        android:contentDescription="Picture in picture"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnCast"
+                        android:nextFocusRight="@id/btnFill"
+                        android:nextFocusUp="@id/btnNext"
+                        android:src="@drawable/ic_picture_in_picture"
+                        app:tint="#FFFFFF" />
+
+                </LinearLayout>
+            </LinearLayout>
+        </FrameLayout>
+    </FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

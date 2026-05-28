@@ -11,6 +11,7 @@ import com.kiduyuk.klausk.kiduyutv.data.local.database.DatabaseManager
 import com.kiduyuk.klausk.kiduyutv.data.local.entity.SavedMediaEntity
 import com.kiduyuk.klausk.kiduyutv.data.repository.MyListManager
 import com.kiduyuk.klausk.kiduyutv.util.AuthManager
+import com.kiduyuk.klausk.kiduyutv.util.LiveTvCacheManager
 import com.kiduyuk.klausk.kiduyutv.util.FirebaseManager
 import com.kiduyuk.klausk.kiduyutv.util.FirebaseSyncManager
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
@@ -135,7 +136,7 @@ class SettingsViewModel : ViewModel() {
     fun setDefaultProvider(context: Context, provider: String) {
         // Save to SharedPreferences first
         SettingsManager(context).saveDefaultProvider(provider)
-        
+
         // Ensure FirebaseManager is initialized with correct user before saving
         if (AuthManager.isSignedIn.value) {
             val userId = AuthManager.currentUser?.uid ?: AuthManager.currentUid
@@ -143,11 +144,11 @@ class SettingsViewModel : ViewModel() {
                 FirebaseManager.init(userId)
             }
         }
-        
+
         // Sync default provider to Firebase for cross-device sync
         // This ensures the setting is saved in the cloud and synced to other devices
         FirebaseManager.saveDefaultProvider(provider)
-        
+
         _uiState.update { it.copy(defaultProvider = provider) }
     }
 
@@ -189,11 +190,11 @@ class SettingsViewModel : ViewModel() {
                 }
 
                 FirebaseSyncManager.startSync(forceRefresh = true)
-                
+
                 // Refresh UI with synced provider from SharedPreferences
                 val syncedProvider = SettingsManager(context).getDefaultProvider()
                 _uiState.update { it.copy(defaultProvider = syncedProvider) }
-                
+
                 _uiState.update { it.copy(isFirebaseSyncing = false) }
             } catch (e: Exception) {
                 _uiState.update {
@@ -456,6 +457,78 @@ class SettingsViewModel : ViewModel() {
         }
     }
 
+    // ── Live TV Functions ────────────────────────────────────────────────────────
+    fun updatePlaylistUrl(url: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(playlistUrl = url) }
+        }
+    }
+
+    fun updateEpgUrl(url: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(epgUrl = url) }
+        }
+    }
+
+    fun updateLiveTvData(context: Context) {
+        if (_uiState.value.isUpdatingLiveTv) return
+
+        val playlistUrl = _uiState.value.playlistUrl
+        val epgUrl = _uiState.value.epgUrl
+
+        if (playlistUrl.isBlank() && epgUrl.isBlank()) {
+            _uiState.update {
+                it.copy(liveTvUpdateError = "Please enter at least one URL (playlist or EPG)")
+            }
+            return
+        }
+
+
+        _uiState.update {
+            it.copy(
+                isUpdatingLiveTv = true,
+                liveTvUpdateSuccess = false,
+                liveTvUpdateError = null
+            )
+        }
+        viewModelScope.launch {
+            try {
+                LiveTvCacheManager.updateLiveTvData(context, playlistUrl, epgUrl)
+                _uiState.update {
+                    it.copy(
+                        isUpdatingLiveTv = false,
+                        liveTvUpdateSuccess = true,
+                        liveTvUpdateError = null
+                    )
+                }
+                delay(3000)
+                _uiState.update { it.copy(liveTvUpdateSuccess = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isUpdatingLiveTv = false,
+                        liveTvUpdateSuccess = false,
+                        liveTvUpdateError = e.message ?: "Failed to update Live TV data"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearLiveTvCache(context: Context) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isClearingLiveTvCache = true, liveTvClearSuccess = false) }
+            try {
+                LiveTvCacheManager.clearLiveTvCache(context)
+                delay(600)
+                _uiState.update { it.copy(isClearingLiveTvCache = false, liveTvClearSuccess = true) }
+                delay(3000)
+                _uiState.update { it.copy(liveTvClearSuccess = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isClearingLiveTvCache = false) }
+            }
+        }
+    }
     // ── Update Check Functions ──────────────────────────────────────────────────
 
     /**
@@ -562,8 +635,8 @@ class SettingsViewModel : ViewModel() {
                     if (apkFile != null) {
                         // Save APK metadata for future cache validation
                         UpdateUtil.saveDownloadedApkMeta(context, apkInfo)
-                        
-                        // Use basic install. Successful installation will trigger 
+
+                        // Use basic install. Successful installation will trigger
                         // UpdateReceiver (via ACTION_MY_PACKAGE_REPLACED) to restart the app.
                         UpdateUtil.checkPermissionAndInstall(context, apkFile) {
                             showPermissionDialog(context, apkFile)
@@ -648,5 +721,13 @@ data class SettingsUiState(
     val firebaseSyncMessage: String = "",
     val firebaseSyncSuccess: Boolean = false,
     val firebaseSyncError: String? = null,
-    val firebaseItemsSynced: Int? = null
+    val firebaseItemsSynced: Int? = null,
+    // Live TV settings
+    val playlistUrl: String = "",
+    val epgUrl: String = "",
+    val isUpdatingLiveTv: Boolean = false,
+    val liveTvUpdateSuccess: Boolean = false,
+    val liveTvUpdateError: String? = null,
+    val isClearingLiveTvCache: Boolean = false,
+    val liveTvClearSuccess: Boolean = false
 )

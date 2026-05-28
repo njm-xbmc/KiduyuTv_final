@@ -31,6 +31,7 @@ import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.MoviesScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.MyListScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.TvShowsScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.LiveTvScreen
+import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.ScheduleScreen
 import com.kiduyuk.klausk.kiduyutv.ui.player.iptv.IptvPlayerActivity
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SearchViewModelFactory
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SearchViewModel
@@ -165,12 +166,15 @@ fun NavGraph(navController: NavHostController) {
             val context = LocalContext.current
             LiveTvScreen(
                 onChannelPlay = { channel ->
-                    // Start the IPTV player activity
+                    // Start the IPTV player activity with EPG metadata
                     val intent = IptvPlayerActivity.createIntent(
                         context = context,
                         channelName = channel.name,
                         streamUrl = channel.url,
-                        channelLogo = channel.logo
+                        channelLogo = channel.logo,
+                        tvgId = channel.tvgId,
+                        tvgName = channel.tvgName,
+                        group = channel.group
                     )
                     context.startActivity(intent)
                 },
@@ -184,6 +188,17 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
+                }
+            )
+        }
+
+        // Schedule Screen: Screen for live TV upcoming schedule from dlhd.pk
+        composable(Screen.Schedule.route) {
+            ScheduleScreen(
+                onNavigate = { route ->
+                    if (route != Screen.Schedule.route) {
+                        navController.navigate(route)
+                    }
                 }
             )
         }

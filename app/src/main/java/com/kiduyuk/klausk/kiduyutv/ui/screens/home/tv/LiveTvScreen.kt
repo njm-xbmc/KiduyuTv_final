@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.kiduyuk.klausk.kiduyutv.data.model.IptvChannel
@@ -70,7 +72,7 @@ fun LiveTvScreen(
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onNotificationClick: (id: Int, type: String) -> Unit = { _, _ -> },
-    viewModel: LiveTvViewModel = remember { LiveTvViewModel() }
+    viewModel: LiveTvViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -79,6 +81,8 @@ fun LiveTvScreen(
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
         viewModel.loadPlaylist()
+        // Pre-load EPG data for program info
+        viewModel.loadEpg()
     }
 
     // Handle channel selection for playback
@@ -322,9 +326,21 @@ private fun SearchContent(
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
 
+    // Track current IME action based on keyboard type
+    var currentImeAction by remember { mutableStateOf(ImeAction.Search) }
+
     // Request focus on search field when screen opens
     LaunchedEffect(Unit) {
         searchFocusRequester.requestFocus()
+    }
+
+    // Handle IME action submission
+    val handleImeAction: (String) -> Unit = { query ->
+        // Trigger search when IME action is pressed
+        if (query.isNotBlank()) {
+            // Already searched via onValueChange, just clear focus
+            focusManager.clearFocus()
+        }
     }
 
     Column(
@@ -394,7 +410,9 @@ private fun SearchContent(
                 // Keep focus after clearing
                 searchFocusRequester.requestFocus()
             },
-            focusRequester = searchFocusRequester
+            onImeAction = handleImeAction,
+            focusRequester = searchFocusRequester,
+            imeAction = currentImeAction
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -469,7 +487,9 @@ private fun SearchInputField(
     query: String,
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
-    focusRequester: FocusRequester
+    onImeAction: (String) -> Unit,
+    focusRequester: FocusRequester,
+    imeAction: ImeAction = ImeAction.Search
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -485,7 +505,6 @@ private fun SearchInputField(
                 color = if (isFocused) PrimaryRed else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
-            .focusable(interactionSource = interactionSource)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -502,7 +521,7 @@ private fun SearchInputField(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            TextField(
+            androidx.compose.foundation.text.BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
                 textStyle = TextStyle(
@@ -512,31 +531,27 @@ private fun SearchInputField(
                 cursorBrush = SolidColor(PrimaryRed),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Search,
+                    imeAction = imeAction,
                     autoCorrect = false
                 ),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedSupportingTextColor = TextSecondary,
-                    unfocusedSupportingTextColor = TextSecondary
+                keyboardActions = KeyboardActions(
+                    onSearch = { onImeAction(query) },
+                    onNext = { onImeAction(query) },
+                    onDone = { onImeAction(query) }
                 ),
+                interactionSource = interactionSource,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .focusable(),
-                placeholder = {
-                    Text(
-                        text = "Type channel name to search...",
-                        color = TextSecondary,
-                        fontSize = 16.sp
-                    )
+                    .weight(1f)
+                    .focusRequester(focusRequester),
+                decorationBox = { innerTextField ->
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Type channel name to search...",
+                            color = TextSecondary,
+                            fontSize = 16.sp
+                        )
+                    }
+                    innerTextField()
                 }
             )
 
