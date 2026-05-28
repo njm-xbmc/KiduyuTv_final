@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -695,9 +694,9 @@ private fun EventItem(
                 }
             }
 
-            // Quick channel selector - shown even when not expanded if event has channels
-            // This provides easy channel switching without expanding the event
-            if (!isExpanded && event.channels.size >= 1) {
+            // Quick channel selector - shown if event has channels
+            // This provides easy channel switching even when the event is expanded
+            if (event.channels.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Quick play button - always focusable when event has channels
