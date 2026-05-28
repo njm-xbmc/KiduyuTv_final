@@ -473,12 +473,15 @@ private fun ChannelsTabContent(
     onChannelClick: (ScrapedChannel) -> Unit,
     onRetry: () -> Unit
 ) {
+    // Filter out channels starting with "18+" and apply search filter
     val filteredChannels = remember(channels, searchQuery) {
-        if (searchQuery.isBlank()) channels
-        else channels.filter { 
-            it.name.contains(searchQuery, ignoreCase = true) ||
-            it.category?.contains(searchQuery, ignoreCase = true) == true 
-        }
+        channels
+            .filter { !it.name.startsWith("18+", ignoreCase = true) }
+            .filter { channel ->
+                if (searchQuery.isBlank()) true
+                else channel.name.contains(searchQuery, ignoreCase = true) ||
+                    channel.category?.contains(searchQuery, ignoreCase = true) == true
+            }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
