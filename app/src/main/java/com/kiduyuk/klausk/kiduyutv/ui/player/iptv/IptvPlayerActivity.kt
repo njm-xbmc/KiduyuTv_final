@@ -708,9 +708,9 @@ class IptvPlayerActivity : AppCompatActivity() {
             scheduleHideOverlay()
         }
 
-        // ── Channel List ─────────────────────────────────────────────────────
+        // ── Channel List → EPG Dialog ──────────────────────────────────────────
         btnChannelList.setOnClickListener {
-            Toast.makeText(this, "Channel list — wire your EPG/playlist here", Toast.LENGTH_SHORT).show()
+            showEpgDialog()
             scheduleHideOverlay()
         }
 
@@ -871,6 +871,67 @@ class IptvPlayerActivity : AppCompatActivity() {
                 player?.play()
             }
         ).show()
+    }
+
+    /**
+     * Shows the EPG (Electronic Program Guide) dialog for the current channel.
+     * Displays program info fetched from EPG data.
+     */
+    private fun showEpgDialog() {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                // Build channel info
+                val channel = IptvChannel(
+                    name = channelName,
+                    logo = channelLogo,
+                    url = streamUrl,
+                    group = channelGroup,
+                    tvgId = tvgId,
+                    tvgName = tvgName
+                )
+
+                // Get EPG data for this channel
+                val programInfo = IptvRepository.getInstance()
+                    .getChannelProgramInfo(channel, this@IptvPlayerActivity)
+
+                val currentProgram = programInfo.currentProgram
+                val nextProgram = programInfo.nextProgram
+
+                // Build EPG message
+                val epgMessage = buildString {
+                    appendLine("Channel: $channelName")
+                    appendLine()
+                    if (currentProgram != null) {
+                        appendLine("Now Playing:")
+                        appendLine("  ${currentProgram.title}")
+                        appendLine("  ${formatTime(currentProgram.startTime)} - ${formatTime(currentProgram.endTime)}")
+                        appendLine()
+                    }
+                    if (nextProgram != null) {
+                        appendLine("Up Next:")
+                        appendLine("  ${nextProgram.title}")
+                        appendLine("  ${formatTime(nextProgram.startTime)} - ${formatTime(nextProgram.endTime)}")
+                    }
+                    if (currentProgram == null && nextProgram == null) {
+                        append("No program information available.")
+                    }
+                }
+
+                // Show the dialog
+                QuitDialog(
+                    context             = this@IptvPlayerActivity,
+                    title               = "Program Guide",
+                    message             = epgMessage,
+                    positiveButtonText  = "Close",
+                    negativeButtonText  = null,
+                    lottieAnimRes       = R.raw.exit,
+                    onNo                = { },
+                    onYes               = { }
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@IptvPlayerActivity, "Failed to load program info", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun releasePlayer() {
