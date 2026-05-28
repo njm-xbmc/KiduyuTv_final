@@ -58,7 +58,8 @@ fun TopBar(
     onNotificationClick: (id: Int, type: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    val navItems = listOf("\uD83C\uDF7F Movies", "\uD83C\uDFAC TV Shows", "\uD83D\uDDC3\uFE0F My List", "\uD83D\uDED1 LIVE TV")
+
+    val navItems = listOf("\uD83C\uDF7F Movies", "\uD83C\uDFAC TV Shows", "\uD83D\uDDC3\uFE0F My List", "\uD83D\uDED1 LIVE TV", "\uD83D\uDCC5 Schedule")
     var showNotificationDialog by remember { mutableStateOf(false) }
     val notifications by NotificationHelper.notifications.collectAsState()
 
@@ -119,6 +120,7 @@ fun TopBar(
                         1 -> "tv_shows"
                         2 -> "my_list"
                         3 -> "live_tv"
+                        4 -> "schedule"
                         else -> ""
                     }
                     val isSelected = selectedRoute == route
