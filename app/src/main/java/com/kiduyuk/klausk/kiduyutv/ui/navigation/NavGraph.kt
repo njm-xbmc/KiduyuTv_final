@@ -31,7 +31,6 @@ import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.MoviesScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.MyListScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.TvShowsScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.LiveTvScreen
-import com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv.ScheduleScreen
 import com.kiduyuk.klausk.kiduyutv.ui.player.iptv.IptvPlayerActivity
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SearchViewModelFactory
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SearchViewModel
@@ -161,7 +160,7 @@ fun NavGraph(navController: NavHostController) {
             )
         }
 
-        // Live TV Screen: Screen for live TV channels.
+        // Live TV Screen: Screen for live TV channels and Schedule.
         composable(Screen.LiveTv.route) {
             val context = LocalContext.current
             LiveTvScreen(
@@ -188,18 +187,40 @@ fun NavGraph(navController: NavHostController) {
                 },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
-                }
+                },
+                initialTab = 0
             )
         }
 
-        // Schedule Screen: Screen for live TV upcoming schedule from dlhd.pk
+        // Schedule Screen: Now part of LiveTvScreen.
         composable(Screen.Schedule.route) {
-            ScheduleScreen(
+            val context = LocalContext.current
+            LiveTvScreen(
+                onChannelPlay = { channel ->
+                    // Start the IPTV player activity with EPG metadata
+                    val intent = IptvPlayerActivity.createIntent(
+                        context = context,
+                        channelName = channel.name,
+                        streamUrl = channel.url,
+                        channelLogo = channel.logo,
+                        tvgId = channel.tvgId,
+                        tvgName = channel.tvgName,
+                        group = channel.group
+                    )
+                    context.startActivity(intent)
+                },
                 onNavigate = { route ->
                     if (route != Screen.Schedule.route) {
                         navController.navigate(route)
                     }
-                }
+                },
+                onSearchClick = {
+                    navController.navigate(Screen.Search.route)
+                },
+                onSettingsClick = {
+                    navController.navigate(Screen.Settings.route)
+                },
+                initialTab = 1
             )
         }
 

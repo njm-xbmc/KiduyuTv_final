@@ -1,5 +1,8 @@
 package com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv
 
+import android.content.Intent
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,21 +10,18 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +31,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -43,27 +44,28 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.kiduyuk.klausk.kiduyutv.data.model.IptvChannel
+import com.kiduyuk.klausk.kiduyutv.data.model.*
 import com.kiduyuk.klausk.kiduyutv.ui.components.LottieLoadingView
 import com.kiduyuk.klausk.kiduyutv.ui.components.TopBar
-import com.kiduyuk.klausk.kiduyutv.ui.theme.BackgroundDark
-import com.kiduyuk.klausk.kiduyutv.ui.theme.CardDark
-import com.kiduyuk.klausk.kiduyutv.ui.theme.DarkRed
-import com.kiduyuk.klausk.kiduyutv.ui.theme.PrimaryRed
-import com.kiduyuk.klausk.kiduyutv.ui.theme.TextPrimary
-import com.kiduyuk.klausk.kiduyutv.ui.theme.TextSecondary
+import com.kiduyuk.klausk.kiduyutv.ui.player.iptv.SchedulePlayerActivity
+import com.kiduyuk.klausk.kiduyutv.ui.theme.*
 import com.kiduyuk.klausk.kiduyutv.viewmodel.CategoryItem
 import com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel
+import com.kiduyuk.klausk.kiduyutv.viewmodel.ScheduleViewModel
+import com.kiduyuk.klausk.kiduyutv.viewmodel.ScheduleUiState
 
 /**
  * Composable function for the Live TV screen.
  * Displays categories, channels, and search functionality for IPTV playlist.
+ * Now merged with Schedule view.
  *
  * @param onChannelPlay Callback when a channel is selected for playback
  * @param onNavigate Lambda to handle navigation between top-level screens
  * @param onSearchClick Lambda to navigate to the search screen
  * @param onSettingsClick Lambda to navigate to the settings screen
+ * @param initialTab Index of the tab to show initially (0 for Live TV, 1 for Schedule)
  * @param viewModel The [LiveTvViewModel] instance
+ * @param scheduleViewModel The [ScheduleViewModel] instance
  */
 @Composable
 fun LiveTvScreen(
@@ -72,17 +74,23 @@ fun LiveTvScreen(
     onSearchClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onNotificationClick: (id: Int, type: String) -> Unit = { _, _ -> },
-    viewModel: LiveTvViewModel = viewModel()
+    initialTab: Int = 0,
+    viewModel: LiveTvViewModel = viewModel(),
+    scheduleViewModel: ScheduleViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val scheduleUiState by scheduleViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Initialize ViewModel with context for caching
+    // Initialize ViewModels with context
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
         viewModel.loadPlaylist()
         // Pre-load EPG data for program info
         viewModel.loadEpg()
+        
+        scheduleViewModel.initialize(context)
+        scheduleViewModel.loadSchedule()
     }
 
     // Handle channel selection for playback
@@ -93,6 +101,13 @@ fun LiveTvScreen(
         }
     }
 
+    // Track selected tab
+    var selectedTabIndex by remember { mutableIntStateOf(initialTab) }
+    val tabs = listOf(
+        TabItem("Live TV", Icons.Default.Tv),
+        TabItem("Schedule", Icons.Default.CalendarToday)
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -102,74 +117,557 @@ fun LiveTvScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
-            // Top Bar
-            TopBar(
+            // Combined Top Bar with Navigation and Tabs
+            LiveTvTopBar(
                 selectedRoute = "live_tv",
                 onNavItemClick = onNavigate,
                 onSearchClick = onSearchClick,
                 onSettingsClick = onSettingsClick,
-                onNotificationClick = onNotificationClick
+                onNotificationClick = onNotificationClick,
+                tabs = tabs,
+                selectedTabIndex = selectedTabIndex,
+                onTabSelected = { selectedTabIndex = it }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            when {
-                // Loading state
-                uiState.isLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LottieLoadingView(size = 300.dp)
-                    }
-                }
-
-                // Error state
-                uiState.error != null -> {
-                    ErrorContent(
-                        errorMessage = uiState.error!!,
-                        onRetry = { viewModel.loadPlaylist(forceRefresh = true) }
+            when (selectedTabIndex) {
+                0 -> { // Live TV Tab
+                    LiveTvTabContent(
+                        uiState = uiState,
+                        viewModel = viewModel
                     )
                 }
-
-                // Search mode
-                uiState.isSearchActive -> {
-                    SearchContent(
-                        searchQuery = uiState.searchQuery,
-                        searchResults = uiState.searchResults,
-                        onSearchQueryChange = { viewModel.updateSearchQuery(it) },
-                        onChannelClick = { viewModel.selectChannel(it) },
-                        onCloseSearch = { viewModel.deactivateSearch() },
-                        onBackClick = { viewModel.deactivateSearch() }
-                    )
-                }
-
-                // Categories view
-                uiState.selectedCategory == null -> {
-                    CategoriesContent(
-                        categories = uiState.categories,
-                        onCategoryClick = { category ->
-                            viewModel.selectCategory(category.name)
-                        },
-                        onSearchClick = { viewModel.activateSearch() },
-                        totalChannels = viewModel.getTotalChannelCount()
-                    )
-                }
-
-                // Channels view
-                else -> {
-                    ChannelsContent(
-                        categoryName = uiState.selectedCategory!!,
-                        channels = uiState.channels,
-                        onChannelClick = { channel ->
-                            viewModel.selectChannel(channel)
-                        },
-                        onBackClick = { viewModel.clearCategorySelection() }
+                1 -> { // Schedule Tab
+                    ScheduleTabContent(
+                        uiState = scheduleUiState,
+                        viewModel = scheduleViewModel,
+                        onChannelClick = { channel, event ->
+                            scheduleViewModel.selectChannel(channel, event)
+                            val iframeHtml = scheduleViewModel.getIframeHtml(channel.id)
+                            val intent = Intent(context, SchedulePlayerActivity::class.java).apply {
+                                putExtra("IFRAME_HTML", iframeHtml)
+                                putExtra("CHANNEL_NAME", channel.name)
+                                putExtra("EVENT_TITLE", event.title)
+                            }
+                            context.startActivity(intent)
+                        }
                     )
                 }
             }
+        }
+        
+        // Schedule error snackbar
+        if (selectedTabIndex == 1 && scheduleUiState.error != null) {
+            Snackbar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                action = {
+                    TextButton(onClick = { scheduleViewModel.loadSchedule(forceRefresh = true) }) {
+                        Text("Retry", color = PrimaryRed)
+                    }
+                }
+            ) {
+                Text(scheduleUiState.error!!)
+            }
+        }
+    }
+}
+
+/**
+ * Top bar with navigation items and internal tabs
+ */
+@Composable
+private fun LiveTvTopBar(
+    selectedRoute: String,
+    onNavItemClick: (String) -> Unit,
+    onSearchClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onNotificationClick: (Int, String) -> Unit,
+    tabs: List<TabItem>,
+    selectedTabIndex: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().background(CardDark.copy(alpha = 0.5f))) {
+        // Original TopBar for navigation
+        TopBar(
+            selectedRoute = selectedRoute,
+            onNavItemClick = onNavItemClick,
+            onSearchClick = onSearchClick,
+            onSettingsClick = onSettingsClick,
+            onNotificationClick = onNotificationClick
+        )
+        
+        // Tab row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            tabs.forEachIndexed { index, tab ->
+                val isSelected = index == selectedTabIndex
+                val interactionSource = remember { MutableInteractionSource() }
+                val isFocused by interactionSource.collectIsFocusedAsState()
+
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = { onTabSelected(index) }
+                        )
+                        .border(
+                            width = if (isFocused) 2.dp else 0.dp,
+                            color = if (isFocused) Color.White else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        ),
+                    color = if (isSelected) PrimaryRed else if (isFocused) DarkRed else Color.Transparent,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.title,
+                            tint = if (isSelected || isFocused) Color.White else TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = tab.title,
+                            color = if (isSelected || isFocused) Color.White else TextSecondary,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                if (index < tabs.size - 1) {
+                    Spacer(modifier = Modifier.width(16.dp))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Live TV specific content (extracted from original LiveTvScreen)
+ */
+@Composable
+private fun LiveTvTabContent(
+    uiState: com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvUiState,
+    viewModel: LiveTvViewModel
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        when {
+            // Loading state
+            uiState.isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LottieLoadingView(size = 300.dp)
+                }
+            }
+
+            // Error state
+            uiState.error != null -> {
+                ErrorContent(
+                    errorMessage = uiState.error!!,
+                    onRetry = { viewModel.loadPlaylist(forceRefresh = true) }
+                )
+            }
+
+            // Search mode
+            uiState.isSearchActive -> {
+                SearchContent(
+                    searchQuery = uiState.searchQuery,
+                    searchResults = uiState.searchResults,
+                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                    onChannelClick = { viewModel.selectChannel(it) },
+                    onCloseSearch = { viewModel.deactivateSearch() },
+                    onBackClick = { viewModel.deactivateSearch() }
+                )
+            }
+
+            // Categories view
+            uiState.selectedCategory == null -> {
+                CategoriesContent(
+                    categories = uiState.categories,
+                    onCategoryClick = { category ->
+                        viewModel.selectCategory(category.name)
+                    },
+                    onSearchClick = { viewModel.activateSearch() },
+                    totalChannels = viewModel.getTotalChannelCount()
+                )
+            }
+
+            // Channels view
+            else -> {
+                ChannelsContent(
+                    categoryName = uiState.selectedCategory!!,
+                    channels = uiState.channels,
+                    onChannelClick = { channel ->
+                        viewModel.selectChannel(channel)
+                    },
+                    onBackClick = { viewModel.clearCategorySelection() }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Tab item data class
+ */
+private data class TabItem(
+    val title: String,
+    val icon: ImageVector
+)
+
+// --- Schedule components below ---
+
+/**
+ * Schedule tab content - shows upcoming events
+ */
+@Composable
+private fun ScheduleTabContent(
+    uiState: ScheduleUiState,
+    viewModel: ScheduleViewModel,
+    onChannelClick: (ScheduleChannel, ScheduleEvent) -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        when {
+            uiState.isLoading -> {
+                LottieLoadingView(
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+            uiState.scheduleDays.isEmpty() -> {
+                EmptyScheduleView(
+                    onRetry = { viewModel.loadSchedule(forceRefresh = true) }
+                )
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Show each day
+                    items(uiState.scheduleDays) { scheduleDay ->
+                        ScheduleDayCard(
+                            scheduleDay = scheduleDay,
+                            expandedEventIds = uiState.expandedEventIds,
+                            onEventClick = { eventId -> viewModel.toggleEventExpansion(eventId) },
+                            onChannelClick = { channel, event -> onChannelClick(channel, event) }
+                        )
+                    }
+                    
+                    // Bottom padding
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+            }
+        }
+
+        // Refresh indicator
+        if (uiState.isRefreshing) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter),
+                color = PrimaryRed
+            )
+        }
+    }
+}
+
+/**
+ * Empty state view for schedule
+ */
+@Composable
+private fun EmptyScheduleView(
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.EventBusy,
+            contentDescription = null,
+            tint = TextSecondary,
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "No Schedule Available",
+            style = MaterialTheme.typography.titleMedium,
+            color = TextPrimary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Unable to load the schedule. Please check your connection.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        val interactionSource = remember { MutableInteractionSource() }
+        val isFocused by interactionSource.collectIsFocusedAsState()
+        
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isFocused) Color.White else PrimaryRed,
+                contentColor = if (isFocused) PrimaryRed else Color.White
+            ),
+            modifier = Modifier.focusable(interactionSource = interactionSource)
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Retry")
+        }
+    }
+}
+
+/**
+ * Card showing a single schedule day with categories and events
+ */
+@Composable
+private fun ScheduleDayCard(
+    scheduleDay: ScheduleDay,
+    expandedEventIds: Set<String>,
+    onEventClick: (String) -> Unit,
+    onChannelClick: (ScheduleChannel, ScheduleEvent) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CardDark),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Day title
+            Text(
+                text = scheduleDay.dateTitle,
+                style = MaterialTheme.typography.titleMedium,
+                color = PrimaryRed,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
+            // Categories
+            scheduleDay.categories.forEach { category ->
+                CategorySection(
+                    category = category,
+                    expandedEventIds = expandedEventIds,
+                    onEventClick = onEventClick,
+                    onChannelClick = onChannelClick
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Section showing a category with its events
+ */
+@Composable
+private fun CategorySection(
+    category: ScheduleCategory,
+    expandedEventIds: Set<String>,
+    onEventClick: (String) -> Unit,
+    onChannelClick: (ScheduleChannel, ScheduleEvent) -> Unit
+) {
+    Column {
+        // Category header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DarkRed.copy(alpha = 0.3f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = category.name,
+                style = MaterialTheme.typography.labelLarge,
+                color = TextPrimary,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${category.events.size} events",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+        }
+
+        // Events
+        category.events.forEach { event ->
+            EventItem(
+                event = event,
+                isExpanded = expandedEventIds.contains(event.id),
+                onClick = { onEventClick(event.id) },
+                onChannelClick = { channel -> onChannelClick(channel, event) }
+            )
+        }
+    }
+}
+
+/**
+ * Individual event item that can be expanded to show channels
+ */
+@Composable
+private fun EventItem(
+    event: ScheduleEvent,
+    isExpanded: Boolean,
+    onClick: () -> Unit,
+    onChannelClick: (ScheduleChannel) -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .focusable(interactionSource = interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        color = if (isFocused) DarkRed.copy(alpha = 0.5f) else if (isExpanded) PrimaryRed.copy(alpha = 0.1f) else Color.Transparent,
+        shape = RoundedCornerShape(8.dp),
+        border = if (isFocused) BorderStroke(1.dp, Color.White) else null
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(12.dp)
+        ) {
+            // Event header row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Time badge
+                Surface(
+                    color = if (isExpanded) PrimaryRed else DarkRed,
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = event.displayTime,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Event title
+                Text(
+                    text = event.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                    fontWeight = if (isExpanded) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Expand icon
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = TextSecondary
+                )
+            }
+
+            // Expanded channels
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Text(
+                        text = "Available Channels:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    // Channel chips
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        event.channels.forEach { channel ->
+                            ChannelChip(
+                                channel = channel,
+                                onClick = { onChannelClick(channel) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Clickable channel chip
+ */
+@Composable
+private fun ChannelChip(
+    channel: ScheduleChannel,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    Surface(
+        modifier = Modifier
+            .focusable(interactionSource = interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        color = if (isFocused) Color.White else PrimaryRed,
+        shape = RoundedCornerShape(16.dp),
+        border = if (isFocused) BorderStroke(1.dp, PrimaryRed) else null
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayCircle,
+                contentDescription = null,
+                tint = if (isFocused) PrimaryRed else Color.White,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = channel.name,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isFocused) PrimaryRed else Color.White
+            )
         }
     }
 }
