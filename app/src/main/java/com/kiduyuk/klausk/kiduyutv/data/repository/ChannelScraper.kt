@@ -1,5 +1,6 @@
 package com.kiduyuk.klausk.kiduyutv.data.repository
 
+import android.util.Log
 import com.kiduyuk.klausk.kiduyutv.data.model.ScrapedChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -90,7 +91,7 @@ object ChannelScraper {
 
         // Get all a.card elements
         val cardLinks = grid.select("a.card")
-        android.util.Log.d(TAG, "Found ${cardLinks.size} a.card elements")
+        android.util.Log.i(TAG, "Found ${cardLinks.size} a.card elements")
 
         for (link in cardLinks) {
             try {
@@ -152,42 +153,43 @@ object ChannelScraper {
 
             // Get all buttons in div#playerBtns and extract data-url
             val playerButtons = document.select("div#playerBtns button.player-btn[data-url]")
-            android.util.Log.d(TAG, "Found ${playerButtons.size} player buttons")
+            android.util.Log.i(TAG, "Found ${playerButtons.size} player buttons")
 
             for (button in playerButtons) {
                 val dataUrl = button.attr("data-url").trim()
                 if (dataUrl.isNotEmpty() && dataUrl.startsWith("http")) {
+                    Log.i(TAG, "Found ${dataUrl} ")
                     streamUrls.add(dataUrl)
                 }
             }
 
             // Fallback: if no buttons found, try to get iframe src from embed code
-            if (streamUrls.isEmpty()) {
-                val iframe = document.selectFirst("iframe[src*='dlhd.pk/stream'], iframe[src*='stream-']")
-                if (iframe != null) {
-                    val src = iframe.attr("src").trim()
-                    if (src.isNotEmpty()) {
-                        streamUrls.add(src)
-                    }
-                }
-            }
+//            if (streamUrls.isEmpty()) {
+//                val iframe = document.selectFirst("iframe[src*='dlhd.pk/stream'], iframe[src*='stream-']")
+//                if (iframe != null) {
+//                    val src = iframe.attr("src").trim()
+//                    if (src.isNotEmpty()) {
+//                        streamUrls.add(src)
+//                    }
+//                }
+//            }
 
             // Fallback: construct URLs from channel ID
-            if (streamUrls.isEmpty()) {
-                val idMatch = Regex("""id=(\d+)""").find(watchPageUrl)
-                if (idMatch != null) {
-                    val channelId = idMatch.groupValues[1]
-                    val baseUrls = listOf(
-                        "$BASE_URL/stream/stream-$channelId.php",
-                        "$BASE_URL/cast/stream-$channelId.php",
-                        "$BASE_URL/watch/stream-$channelId.php",
-                        "$BASE_URL/plus/stream-$channelId.php",
-                        "$BASE_URL/casting/stream-$channelId.php",
-                        "$BASE_URL/player/stream-$channelId.php"
-                    )
-                    streamUrls.addAll(baseUrls)
-                }
-            }
+//            if (streamUrls.isEmpty()) {
+//                val idMatch = Regex("""id=(\d+)""").find(watchPageUrl)
+//                if (idMatch != null) {
+//                    val channelId = idMatch.groupValues[1]
+//                    val baseUrls = listOf(
+//                        "$BASE_URL/stream/stream-$channelId.php",
+//                        "$BASE_URL/cast/stream-$channelId.php",
+//                        "$BASE_URL/watch/stream-$channelId.php",
+//                        "$BASE_URL/plus/stream-$channelId.php",
+//                        "$BASE_URL/casting/stream-$channelId.php",
+//                        "$BASE_URL/player/stream-$channelId.php"
+//                    )
+//                    streamUrls.addAll(baseUrls)
+//                }
+            //}
 
             streamUrls.distinct()
         } catch (e: Exception) {

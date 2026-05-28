@@ -1202,20 +1202,25 @@ private fun EventItem(
                 val quickPlayInteractionSource = remember { MutableInteractionSource() }
                 val isQuickPlayFocused by quickPlayInteractionSource.collectIsFocusedAsState()
 
-                Surface(
+                Box(
                     modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isQuickPlayFocused) Color.White else PrimaryRed)
+                        .border(
+                            width = if (isQuickPlayFocused) 2.dp else 0.dp,
+                            color = if (isQuickPlayFocused) PrimaryRed else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        )
                         .focusable(interactionSource = quickPlayInteractionSource)
                         .clickable(
                             interactionSource = quickPlayInteractionSource,
                             indication = null,
                             onClick = { onChannelClick(event.channels.first()) }
-                        ),
-                    color = if (isQuickPlayFocused) Color.White else PrimaryRed,
-                    shape = RoundedCornerShape(8.dp),
-                    border = if (isQuickPlayFocused) BorderStroke(2.dp, PrimaryRed) else null
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
