@@ -143,13 +143,14 @@ fun LiveTvScreen(
                         uiState = scheduleUiState,
                         viewModel = scheduleViewModel,
                         onChannelClick = { channel, event ->
-                            scheduleViewModel.selectChannel(channel, event)
-                            val iframeHtml = scheduleViewModel.getIframeHtml(channel.id)
-                            val intent = Intent(context, SchedulePlayerActivity::class.java).apply {
-                                putExtra("IFRAME_HTML", iframeHtml)
-                                putExtra("CHANNEL_NAME", channel.name)
-                                putExtra("EVENT_TITLE", event.title)
-                            }
+                            // Use channel ID to launch SchedulePlayerActivity
+                            // The player will fetch ChannelWatchPage and playerOptions
+                            val intent = SchedulePlayerActivity.createIntent(
+                                context = context,
+                                channelId = channel.id,
+                                channelName = channel.name,
+                                eventTitle = event.title
+                            )
                             context.startActivity(intent)
                         }
                     )
@@ -529,6 +530,8 @@ private fun CategorySection(
 
 /**
  * Individual event item that can be expanded to show channels
+ * Always shows available channels section when event has channels,
+ * making it focusable for TV D-pad navigation even with a single channel
  */
 @Composable
 private fun EventItem(
@@ -540,13 +543,20 @@ private fun EventItem(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
-    // Focus requester for the first channel chip when expanded
+    // Focus requesters for channel navigation
     val firstChannelFocusRequester = remember { FocusRequester() }
+    val availableChannelsFocusRequester = remember { FocusRequester() }
 
-    // Request focus on first channel when event is expanded
-    LaunchedEffect(isExpanded) {
+    // Request focus on Available Channels button when event is expanded
+    LaunchedEffect(isExpanded, event.channels.size) {
         if (isExpanded && event.channels.isNotEmpty()) {
-            firstChannelFocusRequester.requestFocus()
+            // First try to focus on Available Channels label, then first channel
+            try {
+                availableChannelsFocusRequester.requestFocus()
+            } catch (e: Exception) {
+                // If failed, try first channel
+                firstChannelFocusRequester.requestFocus()
+            }
         }
     }
 
@@ -603,7 +613,7 @@ private fun EventItem(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (event.channels.size > 1) {
+                    if (event.channels.size >= 1) {
                         Surface(
                             color = if (isExpanded) PrimaryRed else DarkRed,
                             shape = RoundedCornerShape(12.dp)
@@ -625,19 +635,46 @@ private fun EventItem(
                 }
             }
 
-            // Expanded channels - always focusable even with single channel
+            // Expanded channels section - always shown when event has channels and is expanded
+            // OR always visible when event has only 1 channel (for better TV navigation)
             AnimatedVisibility(
-                visible = isExpanded,
+                visible = isExpanded && event.channels.isNotEmpty(),
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
                 Column(modifier = Modifier.padding(top = 12.dp)) {
-                    Text(
-                        text = "Available Channels:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                    // Focusable "Available Channels" label/button
+                    val channelsInteractionSource = remember { MutableInteractionSource() }
+                    val isChannelsLabelFocused by channelsInteractionSource.collectIsFocusedAsState()
+
+                    Surface(
+                        modifier = Modifier
+                            .focusRequester(availableChannelsFocusRequester)
+                            .focusable(interactionSource = channelsInteractionSource),
+                        color = Color.Transparent,
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tv,
+                                contentDescription = null,
+                                tint = if (isChannelsLabelFocused) Color(0xFF448AFF) else TextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Available Channels",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (isChannelsLabelFocused) Color(0xFF448AFF) else TextSecondary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Channel chips - use LazyRow for better focus management
                     LazyRow(
@@ -653,6 +690,52 @@ private fun EventItem(
                                 onClick = { onChannelClick(channel) }
                             )
                         }
+                    }
+                }
+            }
+
+            // Quick channel selector - shown even when not expanded if event has channels
+            // This provides easy channel switching without expanding the event
+            if (!isExpanded && event.channels.size >= 1) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Quick play button - always focusable when event has channels
+                val quickPlayInteractionSource = remember { MutableInteractionSource() }
+                val isQuickPlayFocused by quickPlayInteractionSource.collectIsFocusedAsState()
+
+                Surface(
+                    modifier = Modifier
+                        .focusable(interactionSource = quickPlayInteractionSource)
+                        .clickable(
+                            interactionSource = quickPlayInteractionSource,
+                            indication = null,
+                            onClick = { onChannelClick(event.channels.first()) }
+                        ),
+                    color = if (isQuickPlayFocused) Color.White else PrimaryRed,
+                    shape = RoundedCornerShape(8.dp),
+                    border = if (isQuickPlayFocused) BorderStroke(2.dp, PrimaryRed) else null
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayCircle,
+                            contentDescription = null,
+                            tint = if (isQuickPlayFocused) PrimaryRed else Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (event.channels.size == 1) {
+                                "Play: ${event.channels.first().name}"
+                            } else {
+                                "Play (${event.channels.size} channels available)"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isQuickPlayFocused) PrimaryRed else Color.White,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
