@@ -300,7 +300,7 @@ class IptvPlayerActivity : AppCompatActivity() {
                 if (!isOverlayVisible) {
                     showOverlay()
                 } else {
-                    // Toggle visibility on repeated press
+                    //Toggle visibility on repeated press
                     hideOverlay()
                 }
                 return true
