@@ -1031,9 +1031,15 @@ private fun CategorySection(
 }
 
 /**
- * Individual event item that can be expanded to show channels
+ * Individual event item that can be expanded to show channels.
  * Always shows available channels section when event has channels,
- * making it focusable for TV D-pad navigation even with a single channel
+ * making it focusable for TV D-pad navigation even with a single channel.
+ *
+ * Fix: Removed redundant .focusable() from the Quick Play button Box.
+ * Modifier.clickable() already registers the element in the TV focus
+ * traversal system and handles KEYCODE_DPAD_CENTER / KEYCODE_ENTER
+ * internally. The duplicate .focusable() was swallowing remote OK events
+ * before clickable() could process them.
  */
 @Composable
 private fun EventItem(
@@ -1196,12 +1202,14 @@ private fun EventItem(
                 }
             }
 
-            // Quick channel selector - shown if event has channels
-            // This provides easy channel switching even when the event is expanded
+            // Quick channel selector - shown if event has channels.
+            // FIX: Removed .focusable() — .clickable() already handles focus
+            // registration and D-pad center/enter events on its own. The prior
+            // .focusable() was creating a duplicate interaction pipeline that
+            // consumed KEYCODE_DPAD_CENTER before clickable() could fire onClick.
             if (event.channels.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Quick play button - always focusable when event has channels
                 val quickPlayInteractionSource = remember { MutableInteractionSource() }
                 val isQuickPlayFocused by quickPlayInteractionSource.collectIsFocusedAsState()
 
@@ -1214,7 +1222,7 @@ private fun EventItem(
                             color = if (isQuickPlayFocused) PrimaryRed else Color.Transparent,
                             shape = RoundedCornerShape(8.dp)
                         )
-                        .focusable(interactionSource = quickPlayInteractionSource)
+                        // .focusable() REMOVED — clickable handles focus + D-pad natively
                         .clickable(
                             interactionSource = quickPlayInteractionSource,
                             indication = null,
@@ -1251,7 +1259,13 @@ private fun EventItem(
 }
 
 /**
- * Clickable channel chip - always focusable for D-pad navigation
+ * Clickable channel chip — always focusable for D-pad navigation.
+ *
+ * Fix: Removed .focusable() before .clickable(). Modifier.clickable()
+ * already makes the composable focusable and handles KEYCODE_DPAD_CENTER /
+ * KEYCODE_ENTER. The prior explicit .focusable() created a second focus
+ * node sharing the same MutableInteractionSource, which intercepted remote
+ * OK key events and prevented onClick from firing.
  */
 @Composable
 private fun ChannelChip(
@@ -1272,7 +1286,7 @@ private fun ChannelChip(
                     Modifier
                 }
             )
-            .focusable(interactionSource = interactionSource)
+            // .focusable() REMOVED — clickable handles focus + D-pad natively
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
