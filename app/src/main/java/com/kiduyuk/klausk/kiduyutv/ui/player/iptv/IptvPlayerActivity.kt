@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Rational
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -55,6 +56,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import com.kiduyuk.klausk.kiduyutv.R
@@ -923,10 +925,10 @@ class IptvPlayerActivity : AppCompatActivity() {
                     title               = "Program Guide",
                     message             = epgMessage,
                     positiveButtonText  = "Close",
-                    negativeButtonText  = null,
+                    negativeButtonText  = "Retry",
                     lottieAnimRes       = R.raw.exit,
                     onNo                = { },
-                    onYes               = { }
+                    onYes               = {finish() }
                 ).show()
             } catch (e: Exception) {
                 Toast.makeText(this@IptvPlayerActivity, "Failed to load program info", Toast.LENGTH_SHORT).show()
@@ -952,10 +954,20 @@ class IptvPlayerActivity : AppCompatActivity() {
             setFractionalTextSize(0.04f)
             // Add padding from bottom (2% of video height)
             setBottomPaddingFraction(0.02f)
-            // Set text color to black
-            setTextColor(android.graphics.Color.BLACK)
-            // Set text size in sp (16sp)
-            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16f)
+
+            // Configure custom style (Black text on transparent background)
+            val customStyle = CaptionStyleCompat(
+                android.graphics.Color.BLACK,
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT,
+                CaptionStyleCompat.EDGE_TYPE_NONE,
+                android.graphics.Color.BLACK,
+                null
+            )
+            setStyle(customStyle)
+
+            // Set fixed text size (16sp)
+            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16f)
         }
     }
 

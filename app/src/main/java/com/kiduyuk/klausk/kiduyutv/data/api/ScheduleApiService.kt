@@ -19,7 +19,7 @@ class ScheduleApiService {
     companion object {
         private const val TAG = "ScheduleApi"
         const val BASE_URL = "https://dlhd.pk"
-        private const val SCHEDULE_URL = "https://dlhd.pk/schedule/"
+        private const val SCHEDULE_URL = BASE_URL
         private const val TIMEOUT_SECONDS = 30L
     }
 
