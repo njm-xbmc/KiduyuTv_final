@@ -325,23 +325,6 @@ class SchedulePlayerActivity : ComponentActivity() {
     }
 
     /**
-     * Loads the current stream into WebView
-     */
-    private fun loadCurrentStream() {
-        currentIframeHtml?.let { html ->
-            if (::webView.isInitialized) {
-                webView.loadDataWithBaseURL(
-                    "https://dlhd.pk",
-                    html,
-                    "text/html",
-                    "UTF-8",
-                    null
-                )
-            }
-        }
-    }
-
-    /**
      * Updates the top bar with current player options
      */
     private fun updateTopBar() {

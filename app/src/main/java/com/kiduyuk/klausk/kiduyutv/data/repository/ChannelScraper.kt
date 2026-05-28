@@ -303,7 +303,7 @@ object ChannelScraper {
             element.selectFirst("[class*=name]")?.text()?.trim(),
             element.selectFirst("[class*=title]")?.text()?.trim(),
             element.text().trim()
-        ).filter { it.isNotEmpty() }.firstOrNull()
+        ).filter { !it.isNullOrEmpty() }.firstOrNull()
 
         return name ?: "Unknown Channel"
     }
