@@ -73,6 +73,9 @@ class SchedulePlayerActivity : ComponentActivity() {
     private var channelName: String = "Channel"
     private var eventTitle: String = "Channel"
 
+    // Prevent multiple activity launches when a stream is sniffed
+    private var isStreamSniffed = false
+
     // Player sources - now uses ChannelWatchPage and PlayerOption
     private var playerOptions: List<PlayerOption> = emptyList()
     private var selectedPlayerIndex: Int = 0
@@ -97,14 +100,6 @@ class SchedulePlayerActivity : ComponentActivity() {
 
         /**
          * Creates an intent to launch the SchedulePlayerActivity
-         * Uses iframeUrls list for playing multiple stream options
-         *
-         * @param context Application context
-         * @param channelId The channel ID (for reference)
-         * @param channelName Display name for the channel
-         * @param eventTitle Display name for the current event
-         * @param iframeUrls List of iframe URLs for different stream players
-         * @param selectedPlayerIndex Initial player index to select
          */
         fun createIntent(
             context: Context,
@@ -129,12 +124,11 @@ class SchedulePlayerActivity : ComponentActivity() {
             cursorView.animate().alpha(0f).setDuration(500).start()
             isCursorVisible = false
         }
-        // Hide top bar together with cursor
         hideTopBar()
     }
     private var isCursorVisible = false
 
-    // Top bar auto-hide timer (kept for legacy reference but unified into cursor timer)
+    // Top bar auto-hide timer
     private val topBarHideHandler = Handler(Looper.getMainLooper())
     private val topBarHideRunnable = Runnable {
         if (isTopBarVisible.value && !isDpadNavigating) {
@@ -147,13 +141,11 @@ class SchedulePlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Get intent extras
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID) ?: ""
         channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME) ?: "Channel"
         eventTitle = intent.getStringExtra(EXTRA_EVENT_TITLE) ?: "Event"
         selectedPlayerIndex = intent.getIntExtra(EXTRA_SELECTED_PLAYER, 0)
 
-        // Get iframe URLs passed directly from scraped channels
         val passedIframeUrls = intent.getStringArrayListExtra(EXTRA_IFRAME_URLS)
         if (!passedIframeUrls.isNullOrEmpty()) {
             iframeUrls = passedIframeUrls
@@ -167,20 +159,16 @@ class SchedulePlayerActivity : ComponentActivity() {
             return
         }
 
-        // Detect device type
         detectDeviceType()
 
-        // Handle back press
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 showExitConfirmationDialog()
             }
         })
 
-        // Setup layout with Compose top bar
         setupLayout()
 
-        // Use direct iframe URLs if available, otherwise fetch from channel page
         if (hasDirectIframeUrls) {
             setupWithDirectIframeUrls()
         } else {
@@ -189,8 +177,37 @@ class SchedulePlayerActivity : ComponentActivity() {
     }
 
     /**
-     * Fetches the ChannelWatchPage to get player options and iframe URL
+     * Unified handler for successfully sniffing a stream.
+     * Routes the extracted URL to the native ExoPlayer and tears down the WebView.
      */
+    private fun handleSniffedStream(streamUrl: String) {
+        if (isStreamSniffed) return
+        isStreamSniffed = true
+
+        android.util.Log.i(TAG, "[StreamSniffer] SUCCESS! Routing to native player: $streamUrl")
+
+        runOnUiThread {
+            Toast.makeText(this, "Stream detected! Launching native player...", Toast.LENGTH_SHORT).show()
+
+            val intent = IptvPlayerActivity.createIntent(
+                context = this@SchedulePlayerActivity,
+                channelName = channelName,
+                streamUrl = streamUrl,
+                channelLogo = null,
+                tvgId = intent.getStringExtra(EXTRA_CHANNEL_ID),
+                tvgName = eventTitle,
+                group = "Scheduled Events"
+            )
+
+            startActivity(intent)
+
+            if (::webView.isInitialized) {
+                webView.loadUrl("about:blank")
+            }
+            finish()
+        }
+    }
+
     private fun fetchChannelWatchPage(channelId: String) {
         CoroutineScope(Dispatchers.Main).launch {
             val result = withContext(Dispatchers.IO) {
@@ -202,33 +219,24 @@ class SchedulePlayerActivity : ComponentActivity() {
                     channelWatchPage = watchPage
                     playerOptions = watchPage.playerOptions
 
-                    // Find initial player to use
                     if (playerOptions.isEmpty()) {
-                        // No player options, use default iframe
                         currentIframeHtml = ScheduleRepository.getInstance()
                             .generateIframeHtml(watchPage.defaultIframeUrl)
                     } else {
-                        // Use selected player or first active player
                         val playerToUse = playerOptions.getOrNull(selectedPlayerIndex)
                             ?: playerOptions.find { it.isActive }
                             ?: playerOptions.first()
 
                         currentIframeHtml = ScheduleRepository.getInstance()
                             .generateIframeHtml(playerToUse.url)
-
-                        // Update selected index
                         selectedPlayerIndex = playerOptions.indexOf(playerToUse)
                     }
 
-                    // Load the stream
                     loadCurrentStream()
-
-                    // Update the top bar
                     updateTopBar()
                 },
                 onFailure = { error ->
                     android.util.Log.e(TAG, "Failed to fetch watch page: ${error.message}")
-                    // Fall back to default stream URL
                     currentIframeHtml = ScheduleRepository.getInstance()
                         .generateIframeHtml("https://dlhd.pk/player/stream-$channelId.php")
                     loadCurrentStream()
@@ -237,9 +245,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Loads the current stream into WebView
-     */
     private fun loadCurrentStream() {
         currentIframeHtml?.let { html ->
             if (::webView.isInitialized) {
@@ -254,10 +259,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Sets up the player with direct iframe URLs passed from scraped channels
-     * Shows toast with total number of iframes and loads the first one
-     */
     private fun setupWithDirectIframeUrls() {
         if (iframeUrls.isEmpty()) {
             Toast.makeText(this, "No stream URLs available", Toast.LENGTH_SHORT).show()
@@ -265,17 +266,9 @@ class SchedulePlayerActivity : ComponentActivity() {
             return
         }
 
-        // Show toast with total number of iframes
         val totalIframes = iframeUrls.size
-        Toast.makeText(
-            this,
-            "$totalIframes stream option(s) available for $channelName",
-            Toast.LENGTH_LONG
-        ).show()
+        Toast.makeText(this, "$totalIframes stream option(s) available for $channelName", Toast.LENGTH_LONG).show()
 
-        android.util.Log.i(TAG, "Setting up with $totalIframes direct iframe URLs")
-
-        // Convert iframe URLs to PlayerOptions
         playerOptions = iframeUrls.mapIndexed { index, url ->
             PlayerOption(
                 playerNumber = index + 1,
@@ -284,24 +277,18 @@ class SchedulePlayerActivity : ComponentActivity() {
             )
         }
 
-        // Ensure selected index is valid
         if (selectedPlayerIndex >= playerOptions.size) {
             selectedPlayerIndex = 0
         }
 
-        // Load the first iframe
         if (iframeUrls.isNotEmpty()) {
             currentIframeHtml = generateIframeHtml(iframeUrls[selectedPlayerIndex])
             loadCurrentStream()
         }
 
-        // Update top bar with player options
         updateTopBar()
     }
 
-    /**
-     * Generates iframe HTML for the given stream URL
-     */
     private fun generateIframeHtml(streamUrl: String): String {
         return """
             <!DOCTYPE html>
@@ -321,194 +308,68 @@ class SchedulePlayerActivity : ComponentActivity() {
         """.trimIndent()
     }
 
-    /**
-     * Updates the top bar with current player options.
-     * The ComposeView recomposes automatically when Compose state changes.
-     */
     private fun updateTopBar() {
-        // Trigger recomposition by resetting top bar visibility
         isTopBarVisible.value = true
         scheduleTopBarHide()
     }
 
-    /**
-     * Injects JavaScript code that continuously monitors for video tags and forces volume to max
-     * Shows a toast message when videos are found
-     */
     private fun injectVideoVolumeController() {
         if (!::webView.isInitialized) return
-
         val jsCode = """
             (function() {
                 console.log('[VideoController] Initializing video volume controller');
-                
-                // Function to force volume to max on a video element
                 function setVideoVolumeMax(video) {
                     try {
                         if (video.volume !== 1 || video.muted) {
                             video.volume = 1;
                             video.muted = false;
-                            console.log('[VideoController] Set volume to max for video:', video);
                         }
-                    } catch(e) {
-                        console.error('[VideoController] Error setting volume:', e);
-                    }
+                    } catch(e) { }
                 }
-                
-                // Function to process all existing videos
                 function processAllVideos() {
                     try {
-                        // Check main document
                         var videos = document.querySelectorAll('video');
-                        if (videos.length > 0) {
-                            console.log('[VideoController] Found ' + videos.length + ' video(s) in main document');
-                            videos.forEach(function(video) {
-                                setVideoVolumeMax(video);
-                            });
-                        }
+                        if (videos.length > 0) videos.forEach(function(v) { setVideoVolumeMax(v); });
                         
-                        // Check all iframes (same origin only)
                         var iframes = document.querySelectorAll('iframe');
                         iframes.forEach(function(iframe) {
                             try {
                                 if (iframe.contentDocument) {
                                     var iframeVideos = iframe.contentDocument.querySelectorAll('video');
-                                    if (iframeVideos.length > 0) {
-                                        console.log('[VideoController] Found ' + iframeVideos.length + ' video(s) in iframe');
-                                        iframeVideos.forEach(function(video) {
-                                            setVideoVolumeMax(video);
-                                        });
-                                    }
+                                    if (iframeVideos.length > 0) iframeVideos.forEach(function(v) { setVideoVolumeMax(v); });
                                 }
-                            } catch(e) {
-                                // Cross-origin iframe - can't access
-                                console.log('[VideoController] Cannot access iframe (cross-origin)');
-                            }
+                            } catch(e) { }
                         });
-                    } catch(e) {
-                        console.error('[VideoController] Error processing videos:', e);
-                    }
+                    } catch(e) { }
                 }
                 
-                // Function to show toast notification via Android
-                function showToast(message) {
-                    try {
-                        // Try to use Android interface if available
-                        if (window.Android && window.Android.showToast) {
-                            window.Android.showToast(message);
-                        }
-                        console.log('[VideoController] Toast:', message);
-                    } catch(e) {
-                        console.log('[VideoController] Toast (console):', message);
-                    }
-                }
-                
-                // Track if we've already shown toast for this session
-                var hasShownToast = false;
-                
-                // Setup MutationObserver to watch for dynamically added video elements
                 var observer = new MutationObserver(function(mutations) {
-                    var videoFound = false;
-                    
                     mutations.forEach(function(mutation) {
-                        // Check added nodes for videos
                         if (mutation.addedNodes && mutation.addedNodes.length > 0) {
                             for (var i = 0; i < mutation.addedNodes.length; i++) {
                                 var node = mutation.addedNodes[i];
-                                
-                                // Check if the added node itself is a video
-                                if (node.nodeName && node.nodeName.toLowerCase() === 'video') {
-                                    setVideoVolumeMax(node);
-                                    videoFound = true;
-                                }
-                                
-                                // Check if the added node contains videos
+                                if (node.nodeName && node.nodeName.toLowerCase() === 'video') setVideoVolumeMax(node);
                                 if (node.querySelectorAll) {
                                     var videos = node.querySelectorAll('video');
-                                    if (videos.length > 0) {
-                                        videos.forEach(function(video) {
-                                            setVideoVolumeMax(video);
-                                        });
-                                        videoFound = true;
-                                    }
+                                    if (videos.length > 0) videos.forEach(function(v) { setVideoVolumeMax(v); });
                                 }
                             }
                         }
-                        
-                        // Check for attribute changes (like src being set)
-                        if (mutation.type === 'attributes' && mutation.target && 
-                            mutation.target.nodeName && mutation.target.nodeName.toLowerCase() === 'video') {
-                            setVideoVolumeMax(mutation.target);
-                            videoFound = true;
-                        }
                     });
-                    
-                    if (videoFound && !hasShownToast) {
-                        showToast('Video stream found! Adjusting volume to maximum.');
-                        hasShownToast = true;
-                    }
                 });
                 
-                // Start observing the entire document for video additions
                 if (document.body) {
-                    observer.observe(document.body, {
-                        childList: true,
-                        subtree: true,
-                        attributes: true,
-                        attributeFilter: ['src']
-                    });
-                    
-                    // Also observe document for dynamic iframe creation
-                    var iframeObserver = new MutationObserver(function(mutations) {
-                        mutations.forEach(function(mutation) {
-                            if (mutation.addedNodes && mutation.addedNodes.length > 0) {
-                                for (var i = 0; i < mutation.addedNodes.length; i++) {
-                                    var node = mutation.addedNodes[i];
-                                    if (node.nodeName && node.nodeName.toLowerCase() === 'iframe') {
-                                        console.log('[VideoController] New iframe detected');
-                                        // Try to monitor the iframe when it loads
-                                        if (node.addEventListener) {
-                                            node.addEventListener('load', function() {
-                                                processAllVideos();
-                                            });
-                                        }
-                                        processAllVideos();
-                                    }
-                                }
-                            }
-                        });
-                    });
-                    
-                    iframeObserver.observe(document.body, {
-                        childList: true,
-                        subtree: true
-                    });
+                    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
                 }
-                
-                // Process any videos that already exist
                 processAllVideos();
-                
-                // Set up periodic scanning as a fallback (every 2 seconds)
-                var intervalId = setInterval(function() {
-                    processAllVideos();
-                }, 2000);
-                
-                // Store interval ID for cleanup (optional)
-                window.__videoControllerInterval = intervalId;
-                
-                console.log('[VideoController] Video monitoring initialized successfully');
-                
-                // Return success
-                'VideoController initialized';
+                setInterval(processAllVideos, 2000);
             })();
         """.trimIndent()
-
         webView.evaluateJavascript(jsCode, null)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupLayout() {
-        // Create root layout
         rootLayout = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -516,7 +377,6 @@ class SchedulePlayerActivity : ComponentActivity() {
             )
         }
 
-        // Create WebView
         webView = createWebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -553,6 +413,38 @@ class SchedulePlayerActivity : ComponentActivity() {
             }
 
             webViewClient = object : android.webkit.WebViewClient() {
+                
+                override fun shouldInterceptRequest(
+                    view: android.webkit.WebView?,
+                    request: android.webkit.WebResourceRequest?
+                ): android.webkit.WebResourceResponse? {
+                    val url = request?.url?.toString() ?: return super.shouldInterceptRequest(view, request)
+                    val headers = request.requestHeaders
+
+                    if (!isStreamSniffed) {
+                        // 1. Master Catch-All Stream Sniffer
+                        val isKnownExtension = url.contains(".m3u8") || 
+                                               url.contains(".mpd") || 
+                                               url.contains("master.m3u8") || 
+                                               url.contains("playlist.m3u8")
+
+                        // Prevent false positives on js/css files
+                        val isMediaChunk = url.contains("chunk") && !url.endsWith(".js") && !url.endsWith(".css")
+
+                        // 2. Catch Stream Headers
+                        val acceptHeader = headers?.get("Accept") ?: ""
+                        val isVideoRequest = acceptHeader.contains("video/") || 
+                                             acceptHeader.contains("application/x-mpegURL") || 
+                                             acceptHeader.contains("application/dash+xml")
+
+                        if (isKnownExtension || isMediaChunk || isVideoRequest) {
+                            handleSniffedStream(url)
+                        }
+                    }
+
+                    return super.shouldInterceptRequest(view, request)
+                }
+
                 override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     android.util.Log.i(TAG, "[WebView] Page finished: $url")
@@ -566,8 +458,37 @@ class SchedulePlayerActivity : ComponentActivity() {
                         })();
                     """.trimIndent(), null)
 
-                    // Inject the video volume controller with MutationObserver
                     injectVideoVolumeController()
+
+                    // 3. Edge Case: JavaScript Blob Streams (XHR/Fetch Interceptor)
+                    val blobSnifferJs = """
+                        (function() {
+                            console.log('[StreamSniffer] Injecting Fetch/XHR interceptors...');
+
+                            const originalFetch = window.fetch;
+                            window.fetch = async function(...args) {
+                                const reqUrl = typeof args[0] === 'string' ? args[0] : args[0]?.url;
+                                if (reqUrl && (reqUrl.includes('.m3u8') || reqUrl.includes('.mpd'))) {
+                                    if (window.Android && window.Android.onStreamSniffed) {
+                                        window.Android.onStreamSniffed(reqUrl);
+                                    }
+                                }
+                                return originalFetch.apply(this, args);
+                            };
+
+                            const originalOpen = XMLHttpRequest.prototype.open;
+                            XMLHttpRequest.prototype.open = function(method, reqUrl) {
+                                if (reqUrl && (reqUrl.includes('.m3u8') || reqUrl.includes('.mpd'))) {
+                                    if (window.Android && window.Android.onStreamSniffed) {
+                                        window.Android.onStreamSniffed(reqUrl);
+                                    }
+                                }
+                                originalOpen.apply(this, arguments);
+                            };
+                        })();
+                    """.trimIndent()
+
+                    view?.evaluateJavascript(blobSnifferJs, null)
                 }
 
                 override fun onReceivedError(
@@ -578,7 +499,6 @@ class SchedulePlayerActivity : ComponentActivity() {
                     super.onReceivedError(view, request, error)
                     if (request?.isForMainFrame == true) {
                         android.util.Log.e(TAG, "[WebView] Error: ${error?.description}")
-                        // Try next player/stream if current fails
                         if (hasDirectIframeUrls) {
                             tryNextStreamUrl()
                         } else {
@@ -589,19 +509,13 @@ class SchedulePlayerActivity : ComponentActivity() {
             }
 
             webChromeClient = object : android.webkit.WebChromeClient() {
-                override fun onShowCustomView(view: View?, callback: android.webkit.WebChromeClient.CustomViewCallback?) {
-                    super.onShowCustomView(view, callback)
-                    android.util.Log.i(TAG, "[WebChrome] onShowCustomView called")
-                }
-
                 override fun onProgressChanged(view: android.webkit.WebView?, newProgress: Int) {
                     super.onProgressChanged(view, newProgress)
-                    android.util.Log.d(TAG, "[WebChrome] Progress: $newProgress%")
                 }
             }
         }
 
-        // Set up JavaScript interface for showing toasts from WebView
+        // Set up JavaScript interface for showing toasts and catching blob streams
         webView.addJavascriptInterface(object {
             @JavascriptInterface
             fun showToast(message: String) {
@@ -609,9 +523,13 @@ class SchedulePlayerActivity : ComponentActivity() {
                     Toast.makeText(this@SchedulePlayerActivity, message, Toast.LENGTH_LONG).show()
                 }
             }
+
+            @JavascriptInterface
+            fun onStreamSniffed(url: String) {
+                handleSniffedStream(url)
+            }
         }, "Android")
 
-        // Create cursor view for TV navigation
         cursorView = MouseCursorView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -619,7 +537,6 @@ class SchedulePlayerActivity : ComponentActivity() {
             )
         }
 
-        // Create ComposeView for top bar with player source options
         val composeView = ComposeView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -652,7 +569,6 @@ class SchedulePlayerActivity : ComponentActivity() {
             }
         }
 
-        // Add views to layout (order matters - WebView at bottom, Compose on top)
         rootLayout.addView(webView)
         rootLayout.addView(composeView)
         if (!isCursorDisabled) {
@@ -662,12 +578,10 @@ class SchedulePlayerActivity : ComponentActivity() {
 
         setContentView(rootLayout)
 
-        // Make root focusable
         rootLayout.isFocusable = true
         rootLayout.isFocusableInTouchMode = true
         rootLayout.requestFocus()
 
-        // Get screen dimensions after layout
         rootLayout.post {
             screenWidth = rootLayout.width
             screenHeight = rootLayout.height
@@ -679,53 +593,33 @@ class SchedulePlayerActivity : ComponentActivity() {
             }
         }
 
-        // Schedule top bar auto-hide
         scheduleTopBarHide()
     }
 
-    /**
-     * Switches to the specified player index
-     */
     private fun switchToPlayer(index: Int) {
         if (index in playerOptions.indices) {
+            isStreamSniffed = false // Reset sniffer for new source
             selectedPlayerIndex = index
             val player = playerOptions[index]
             currentIframeHtml = generateIframeHtml(player.url)
             loadCurrentStream()
-            Toast.makeText(
-                this,
-                "Switched to: Player ${player.playerNumber}",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "Switched to: Player ${player.playerNumber}", Toast.LENGTH_SHORT).show()
         }
     }
 
-    /**
-     * Tries to load the next available player
-     */
     private fun tryNextPlayer() {
         if (playerOptions.size > 1) {
             val nextIndex = (selectedPlayerIndex + 1) % playerOptions.size
-            Toast.makeText(
-                this,
-                "Stream failed. Trying: Player ${playerOptions[nextIndex].playerNumber}",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "Stream failed. Trying: Player ${playerOptions[nextIndex].playerNumber}", Toast.LENGTH_SHORT).show()
             switchToPlayer(nextIndex)
         }
     }
 
-    /**
-     * Tries to load the next available stream URL (for direct iframe URLs)
-     */
     private fun tryNextStreamUrl() {
         if (iframeUrls.size > 1) {
+            isStreamSniffed = false // Reset sniffer for new source
             val nextIndex = (selectedPlayerIndex + 1) % iframeUrls.size
-            Toast.makeText(
-                this,
-                "Stream failed. Trying: Player ${nextIndex + 1}",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "Stream failed. Trying: Player ${nextIndex + 1}", Toast.LENGTH_SHORT).show()
             selectedPlayerIndex = nextIndex
             currentIframeHtml = generateIframeHtml(iframeUrls[nextIndex])
             loadCurrentStream()
@@ -734,29 +628,21 @@ class SchedulePlayerActivity : ComponentActivity() {
 
     private fun detectDeviceType() {
         val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager
-
         if (uiModeManager.currentModeType != android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) {
             isCursorDisabled = true
-            android.util.Log.i(TAG, "[Device] Non-TV detected, cursor disabled")
-        } else {
-            android.util.Log.i(TAG, "[Device] TV detected, cursor enabled")
         }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(context: android.content.Context): android.webkit.WebView {
         val webView = android.webkit.WebView(context)
-
-        // Check hardware acceleration
-        val isHardwareAccelerated = context.applicationInfo.flags and
-            android.content.pm.ApplicationInfo.FLAG_HARDWARE_ACCELERATED != 0
+        val isHardwareAccelerated = context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_HARDWARE_ACCELERATED != 0
 
         if (isHardwareAccelerated) {
             webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         } else {
             webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         }
-
         return webView
     }
 
@@ -773,13 +659,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         ).show()
     }
 
-    // ——————————————————————————————————————————————————
-
-    private fun showTopBar() {
-        isTopBarVisible.value = true
-        scheduleTopBarHide()
-    }
-
     private fun hideTopBar() {
         isTopBarVisible.value = false
     }
@@ -788,14 +667,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         topBarHideHandler.removeCallbacks(topBarHideRunnable)
         topBarHideHandler.postDelayed(topBarHideRunnable, TOPBAR_HIDE_DELAY_MS)
     }
-
-    private fun resetDpadNavigation() {
-        isDpadNavigating = false
-        topBarHideHandler.removeCallbacks(topBarHideRunnable)
-        topBarHideHandler.postDelayed(topBarHideRunnable, TOPBAR_HIDE_DELAY_MS)
-    }
-
-    // ——————————————————————————————————————————————————
 
     override fun onResume() {
         super.onResume()
@@ -815,7 +686,6 @@ class SchedulePlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // Clean up JavaScript interval
         if (::webView.isInitialized) {
             webView.evaluateJavascript("if(window.__videoControllerInterval) clearInterval(window.__videoControllerInterval);", null)
         }
@@ -844,10 +714,7 @@ class SchedulePlayerActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    // ——————————————————————————————————————————————————
-
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-        // Track dpad navigation activity — unified into showCursorAndResetTimer
         if (isDpadKey(event)) {
             isDpadNavigating = true
             showCursorAndResetTimer()
@@ -867,7 +734,6 @@ class SchedulePlayerActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Unified: show both cursor and top bar, reset shared idle timer
         if (isDpadKeyCode(keyCode)) {
             isDpadNavigating = true
             showCursorAndResetTimer()
@@ -913,31 +779,21 @@ class SchedulePlayerActivity : ComponentActivity() {
     private fun isDpadKey(event: KeyEvent): Boolean {
         return event.source and android.view.InputDevice.SOURCE_DPAD == android.view.InputDevice.SOURCE_DPAD ||
                 event.keyCode in listOf(
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_MENU,
-            KeyEvent.KEYCODE_SETTINGS
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS
         )
     }
 
     private fun isDpadKeyCode(keyCode: Int): Boolean {
         return keyCode in listOf(
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_MENU,
-            KeyEvent.KEYCODE_SETTINGS
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS
         )
     }
-
-    // ——————————————————————————————————————————————————
 
     private fun updateCursorPosition() {
         if (isCursorDisabled) return
@@ -964,23 +820,16 @@ class SchedulePlayerActivity : ComponentActivity() {
         upEvent.recycle()
     }
 
-    /**
-     * Unified idle timer reset — shows both cursor and top bar, then hides both after 5 seconds.
-     * Works on TV (cursor + top bar) and non-TV (top bar only) devices.
-     */
     private fun showCursorAndResetTimer() {
-        // Always show top bar and cancel any pending top bar hide
         isTopBarVisible.value = true
         topBarHideHandler.removeCallbacks(topBarHideRunnable)
 
         if (isCursorDisabled) {
-            // Non-TV: no cursor, but still drive top bar hide via the cursor timer slot
             cursorHideHandler.removeCallbacks(cursorHideRunnable)
             cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
             return
         }
 
-        // TV: show cursor and reset shared idle timer
         cursorView.animate().cancel()
         cursorView.alpha = 1f
         isCursorVisible = true
@@ -993,12 +842,6 @@ class SchedulePlayerActivity : ComponentActivity() {
 // COMPOSE — Player Source Selection Top Bar
 // ============================================================================
 
-/**
- * Composable top bar showing channel info and a focusable row of player source options.
- * Designed for TV navigation with D-pad controls.
- * Uses PlayerOption from ChannelWatchPage for handling multiple streams.
- * Focus automatically shifts to the currently selected source button.
- */
 @Composable
 fun PlayerSourceTopBar(
     channelName: String,
@@ -1011,12 +854,9 @@ fun PlayerSourceTopBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = Color(0xCC000000), // Semi-transparent black
-            )
+            .background(color = Color(0xCC000000))
             .padding(vertical = 8.dp)
     ) {
-        // Channel info row with back button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1024,15 +864,9 @@ fun PlayerSourceTopBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Back button and channel info
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Back button - always focusable
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 BackButton(onBackPressed = onBackPressed)
-
                 Spacer(modifier = Modifier.width(12.dp))
-
                 Column {
                     Text(
                         text = channelName,
@@ -1048,7 +882,6 @@ fun PlayerSourceTopBar(
                 }
             }
 
-            // "Sources" label and player options count
             if (playerOptions.isNotEmpty()) {
                 Text(
                     text = "${playerOptions.size} Players",
@@ -1059,11 +892,9 @@ fun PlayerSourceTopBar(
             }
         }
 
-        // Player source options row (always visible when players are available)
         if (playerOptions.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // "Sources:" label
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -1078,7 +909,6 @@ fun PlayerSourceTopBar(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Player buttons in a LazyRow for better TV navigation
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1098,9 +928,6 @@ fun PlayerSourceTopBar(
     }
 }
 
-/**
- * Back button composable - always focusable for TV navigation
- */
 @Composable
 private fun BackButton(
     onBackPressed: () -> Unit
@@ -1110,9 +937,7 @@ private fun BackButton(
     Surface(
         modifier = Modifier
             .focusable()
-            .onFocusChanged { focusState ->
-                isFocused = focusState.isFocused
-            }
+            .onFocusChanged { focusState -> isFocused = focusState.isFocused }
             .clickable { onBackPressed() },
         shape = RoundedCornerShape(8.dp),
         color = if (isFocused) Color(0xFF424242) else Color.Transparent,
@@ -1122,18 +947,11 @@ private fun BackButton(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Back",
             tint = if (isFocused) Color(0xFF448AFF) else Color.White,
-            modifier = Modifier
-                .padding(8.dp)
-                .size(24.dp)
+            modifier = Modifier.padding(8.dp).size(24.dp)
         )
     }
 }
 
-/**
- * A focusable button for selecting a player option.
- * Styled similar to the image reference - dark background with blue border when focused.
- * Focus is programmatically set when this button's index matches the selected index.
- */
 @Composable
 private fun PlayerOptionButton(
     playerNumber: Int,
@@ -1142,31 +960,28 @@ private fun PlayerOptionButton(
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
-    // Determine button colors based on state (matching image reference style)
     val backgroundColor = when {
-        isSelected -> Color(0xFF2196F3) // Blue for selected
-        isFocused -> Color(0xFF2D2D2D) // Dark gray for focused
-        else -> Color(0xFF1A1A1A)      // Darker default
+        isSelected -> Color(0xFF2196F3)
+        isFocused -> Color(0xFF2D2D2D)
+        else -> Color(0xFF1A1A1A)
     }
 
     val textColor = when {
         isSelected -> Color.White
-        isFocused -> Color(0xFF448AFF) // Accent blue for focused
-        else -> Color(0xFFE0E0E0)      // Light gray for default
+        isFocused -> Color(0xFF448AFF)
+        else -> Color(0xFFE0E0E0)
     }
 
     val borderColor = when {
-        isSelected -> Color(0xFFFF1744) // Red border for selected (like in image)
-        isFocused -> Color(0xFF448AFF)  // Blue border for focused
-        else -> Color(0xFF404040)       // Subtle border for default
+        isSelected -> Color(0xFFFF1744)
+        isFocused -> Color(0xFF448AFF)
+        else -> Color(0xFF404040)
     }
 
     Surface(
         modifier = Modifier
             .focusable()
-            .onFocusChanged { focusState ->
-                isFocused = focusState.isFocused
-            }
+            .onFocusChanged { focusState -> isFocused = focusState.isFocused }
             .clickable { onClick() },
         shape = RoundedCornerShape(8.dp),
         color = backgroundColor,
@@ -1177,7 +992,6 @@ private fun PlayerOptionButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Player number indicator
             Text(
                 text = "P$playerNumber",
                 color = textColor,
@@ -1185,7 +999,6 @@ private fun PlayerOptionButton(
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
             )
 
-            // Checkmark icon for selected state (like in image)
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.Check,
