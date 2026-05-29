@@ -486,6 +486,37 @@ class SchedulePlayerActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Returns true if the URL matches known ad networks, banner scripts, or
+     * ad iframe pages. Add new patterns here as they are encountered in logcat.
+     */
+    private fun isAdRequest(url: String): Boolean {
+        val adPatterns = listOf(
+            // Site-specific ad paths seen on dlhd.pk
+            "adbanner", "rs4k-ad", "rs4k",
+            // Ad-Asia / AA network — identified by data-aa attribute in the iframe src
+            "aa-ads", "adasia",
+            // Common ad networks
+            "doubleclick.net", "googlesyndication.com", "googletagservices.com",
+            "adservice.google", "pagead2.googlesyndication",
+            "adnxs.com", "adsrvr.org",
+            "exoclick.com", "juicyads.com", "adskeeper.com",
+            "hilltopads.net", "adsterra.com", "propellerads.com",
+            "trafficjunky.net", "trafficstars.com",
+            "popunder", "pop-up", "popcash",
+            "clickadu.com", "adcash.com", "bidvertiser.com"
+        )
+        return adPatterns.any { url.contains(it, ignoreCase = true) }
+    }
+
+    /**
+     * Returns a minimal empty 200 response used to silently swallow blocked ad requests.
+     * Using 200 (not 4xx) avoids error callbacks that might trigger player fallback logic.
+     */
+    private fun emptyResponse(): WebResourceResponse {
+        return WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupLayout() {
         rootLayout = FrameLayout(this).apply {
@@ -544,6 +575,15 @@ class SchedulePlayerActivity : ComponentActivity() {
                         ?: return super.shouldInterceptRequest(view, request)
                     val headers = request.requestHeaders
 
+                    // ── Ad Blocker ────────────────────────────────────────────────
+                    // Block at the network level before anything loads or renders.
+                    // Covers both the iframe src request and any ad script/pixel URLs.
+                    if (isAdRequest(url)) {
+                        android.util.Log.d(TAG, "[AdBlock] Blocked: $url")
+                        return emptyResponse()
+                    }
+
+                    // ── Autoplay Injection ────────────────────────────────────────
                     // Inject autoplay/unmute script into every HTML frame response,
                     // including cross-origin nested iframes.
                     val acceptHeader = headers?.get("Accept") ?: ""
@@ -559,12 +599,48 @@ class SchedulePlayerActivity : ComponentActivity() {
                     super.onPageFinished(view, url)
                     android.util.Log.i(TAG, "[WebView] Page finished: $url")
 
-                    // Inject CSS to suppress common ad overlays
+                    // Inject CSS to suppress ad iframes and overlays that slip
+                    // past the network block (e.g. JS-injected after page load).
+                    // The MutationObserver catches dynamically added ad nodes.
                     view?.evaluateJavascript("""
                         (function() {
                             var style = document.createElement('style');
-                            style.innerHTML = 'div[id^="ad"], div[class^="ad"], .popup, .overlay, iframe[src*="ads"] { display: none !important; }';
+                            style.innerHTML = `
+                                [data-aa],
+                                [class*="site-ad"], [class*="ad-banner"], [class*="ad-wrap"],
+                                [id*="ad-"], [id*="banner"],
+                                [class*="popup"], [class*="overlay"], [class*="interstitial"],
+                                iframe[src*="adbanner"], iframe[src*="rs4k"],
+                                iframe[src*="popunder"], iframe[src*="pop-up"],
+                                div[id^="ad"], div[class^="ad"] {
+                                    display: none !important;
+                                    visibility: hidden !important;
+                                    pointer-events: none !important;
+                                    width: 0 !important;
+                                    height: 0 !important;
+                                }
+                            `;
                             document.head.appendChild(style);
+
+                            new MutationObserver(function(mutations) {
+                                mutations.forEach(function(m) {
+                                    m.addedNodes.forEach(function(node) {
+                                        if (node.nodeName !== 'IFRAME') return;
+                                        var src = node.getAttribute('src') || '';
+                                        var hasDataAa = node.hasAttribute('data-aa');
+                                        var cls = node.className || '';
+                                        if (hasDataAa ||
+                                            src.includes('adbanner') ||
+                                            src.includes('rs4k') ||
+                                            src.includes('popunder') ||
+                                            cls.includes('site-ad') ||
+                                            cls.includes('ad-banner')) {
+                                            node.style.cssText = 'display:none!important;width:0!important;height:0!important;';
+                                            node.removeAttribute('src');
+                                        }
+                                    });
+                                });
+                            }).observe(document.documentElement, { childList: true, subtree: true });
                         })();
                     """.trimIndent(), null)
 
