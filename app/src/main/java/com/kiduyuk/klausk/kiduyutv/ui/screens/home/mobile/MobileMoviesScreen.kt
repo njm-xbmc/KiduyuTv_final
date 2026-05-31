@@ -59,10 +59,6 @@ fun MobileMoviesScreen(
     val context = LocalContext.current
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
-    // Search state
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchExpanded by remember { mutableStateOf(false) }
-
     LaunchedEffect(Unit) {
         viewModel.loadHomeContent(context)
     }
@@ -70,15 +66,7 @@ fun MobileMoviesScreen(
     Scaffold(
         topBar = {
             MobileSearchTopBar(
-                searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                isExpanded = isSearchExpanded,
-                onExpandToggle = { isSearchExpanded = !isSearchExpanded },
-                onSearch = {
-                    if (searchQuery.isNotBlank()) {
-                        onNavigate(Screen.Search.route + "?query=${Uri.encode(searchQuery)}")
-                    }
-                },
+                onSearchClick = { onNavigate(Screen.Search.route) },
                 onSettingsClick = { onNavigate(Screen.Settings.route) },
                 title = "Movies"
             )

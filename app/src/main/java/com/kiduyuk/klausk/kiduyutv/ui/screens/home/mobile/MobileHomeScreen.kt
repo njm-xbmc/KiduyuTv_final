@@ -35,9 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -149,22 +147,10 @@ fun MobileHomeScreen(
     }
     val isSelectedItemInMyList = myList.any { item -> item.id == selectedItemId && item.type == selectedItemType }
 
-    // Search state
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchExpanded by remember { mutableStateOf(false) }
-
     Scaffold(
         topBar = {
             MobileSearchTopBar(
-                searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                isExpanded = isSearchExpanded,
-                onExpandToggle = { isSearchExpanded = !isSearchExpanded },
-                onSearch = {
-                    if (searchQuery.isNotBlank()) {
-                        onNavigate(Screen.Search.route + "?query=${Uri.encode(searchQuery)}")
-                    }
-                },
+                onSearchClick = { onNavigate(Screen.Search.route) },
                 onSettingsClick = { onNavigate(Screen.Settings.route) },
                 title = "KiduyuTV"
             )
@@ -655,5 +641,3 @@ private fun LoadingContent() {
         LottieLoadingView(size = 200.dp)
     }
 }
-
-

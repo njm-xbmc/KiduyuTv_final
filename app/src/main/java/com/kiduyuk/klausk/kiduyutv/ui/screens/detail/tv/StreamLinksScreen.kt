@@ -260,6 +260,13 @@ fun StreamProviderItem(
         "VidCore",
         "VidPlus"
     )
+    val autoplayProviders = listOf(
+        "Vidrock",
+        "VidFast",
+        "VidCore",
+        "VidPlus",
+        "VidKing"
+    )
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -328,12 +335,15 @@ fun StreamProviderItem(
                         if (provider.name in autonextProviders) {
                             Tag("Autonext for TV", Color(0xFF9C27B0), Color.White)
                         }
+                        // Autonext for TV tag
+                        if (provider.name in autoplayProviders) {
+                            Tag("Autoplay", Color(0xFF1BE20D), Color.White)
+                        }
 
                         // Original yellow label tags
                         when (provider.name) {
                             "Videasy" -> Tag("BEST FOR TV", Color(0xFFFFC107), Color.Black)
                             "VidLink" -> Tag("BEST FOR MOVIES", Color(0xFFFFC107), Color.Black)
-                            "VidFast" -> Tag("MOVIES & TV", Color(0xFFFFC107), Color.Black)
                         }
                     }
                 }

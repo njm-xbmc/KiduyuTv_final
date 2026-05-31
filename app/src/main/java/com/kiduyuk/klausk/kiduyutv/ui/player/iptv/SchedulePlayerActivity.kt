@@ -27,6 +27,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,6 +36,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
@@ -780,31 +783,20 @@ class SchedulePlayerActivity : ComponentActivity() {
     private fun tryNextPlayer() {
         if (playerOptions.size > 1) {
             val nextIndex = (selectedPlayerIndex + 1) % playerOptions.size
+            val player = playerOptions[nextIndex]
             Toast.makeText(
                 this,
-                "Stream failed. Trying: Server ${playerOptions[nextIndex].playerNumber}",
+                "Stream failed. Trying: Server ${player.playerNumber}",
                 Toast.LENGTH_SHORT
             ).show()
             switchToPlayer(nextIndex)
+            updateTopBar()
         }
     }
 
     private fun tryNextStreamUrl() {
-        if (iframeUrls.size > 1) {
-            val nextIndex = (selectedPlayerIndex + 1) % iframeUrls.size
-            Toast.makeText(
-                this,
-                "Stream failed. Trying: Server ${nextIndex + 1}",
-                Toast.LENGTH_SHORT
-            ).show()
-            selectedPlayerIndex = nextIndex
-            // FIX: keep playerOptions isActive in sync here too
-            playerOptions = playerOptions.mapIndexed { i, option ->
-                option.copy(isActive = i == nextIndex)
-            }
-            currentIframeHtml = generateIframeHtml(iframeUrls[nextIndex])
-            loadCurrentStream()
-        }
+        // Uniform logic for both direct iframe URLs and scraped ones
+        tryNextPlayer()
     }
 
     private fun detectDeviceType() {
@@ -1048,6 +1040,15 @@ fun PlayerSourceTopBar(
     onSourceSelected: (Int) -> Unit,
     onBackPressed: () -> Unit
 ) {
+    val listState = rememberLazyListState()
+
+    // Auto-scroll to selected server when it changes
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex in playerOptions.indices) {
+            listState.animateScrollToItem(selectedIndex)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1107,6 +1108,7 @@ fun PlayerSourceTopBar(
             Spacer(modifier = Modifier.height(4.dp))
 
             LazyRow(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -1114,10 +1116,25 @@ fun PlayerSourceTopBar(
                 contentPadding = PaddingValues(horizontal = 0.dp)
             ) {
                 itemsIndexed(playerOptions) { index, playerOption ->
+                    val isSelected = index == selectedIndex
+                    val focusRequester = remember { FocusRequester() }
+
+                    // Request focus on the button when it becomes selected
+                    LaunchedEffect(isSelected) {
+                        if (isSelected) {
+                            try {
+                                focusRequester.requestFocus()
+                            } catch (e: Exception) {
+                                // Component might not be ready for focus yet
+                            }
+                        }
+                    }
+
                     PlayerOptionButton(
                         playerNumber = playerOption.playerNumber,
-                        isSelected = index == selectedIndex,
-                        onClick = { onSourceSelected(index) }
+                        isSelected = isSelected,
+                        onClick = { onSourceSelected(index) },
+                        modifier = Modifier.focusRequester(focusRequester)
                     )
                 }
             }
@@ -1155,7 +1172,8 @@ private fun BackButton(
 private fun PlayerOptionButton(
     playerNumber: Int,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -1178,7 +1196,7 @@ private fun PlayerOptionButton(
     }
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .focusable()
             .onFocusChanged { focusState -> isFocused = focusState.isFocused }
             .clickable { onClick() },

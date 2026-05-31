@@ -58,10 +58,6 @@ fun MobileGenresScreen(
     val uiState by viewModel.uiState.collectAsState()
     var isLoading by remember { mutableStateOf(true) }
 
-    // Search state
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchExpanded by remember { mutableStateOf(false) }
-
     // Movie genres
     val movieGenres = listOf(
         Genre(28, "Action"),
@@ -112,20 +108,10 @@ fun MobileGenresScreen(
         isLoading = false
     }
 
-    fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
-
     Scaffold(
         topBar = {
             MobileSearchTopBar(
-                searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                isExpanded = isSearchExpanded,
-                onExpandToggle = { isSearchExpanded = !isSearchExpanded },
-                onSearch = {
-                    if (searchQuery.isNotBlank()) {
-                        onNavigate(Screen.Search.route + "?query=${Uri.encode(searchQuery)}")
-                    }
-                },
+                onSearchClick = { onNavigate(Screen.Search.route) },
                 onSettingsClick = { onNavigate(Screen.Settings.route) },
                 title = title,
                 onBackClick = onBackClick
@@ -157,7 +143,7 @@ fun MobileGenresScreen(
                         MobileGenreChip(
                             genre = genre,
                             onClick = {
-                                onGenreClick(genre.id, encode(genre.name))
+                                onGenreClick(genre.id, Uri.encode(genre.name))
                             }
                         )
                     }
