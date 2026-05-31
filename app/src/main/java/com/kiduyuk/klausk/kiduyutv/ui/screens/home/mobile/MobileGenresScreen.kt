@@ -51,7 +51,7 @@ import java.net.URLEncoder
 fun MobileGenresScreen(
     mediaType: String,
     onBackClick: () -> Unit,
-    onNavigate: (String) -> Unit = {},
+    onNavigate: (String) -> Unit,
     onGenreClick: (Int, String) -> Unit,
     viewModel: HomeViewModel = viewModel()
 ) {

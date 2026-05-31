@@ -174,21 +174,33 @@ fun LiveTvScreen(
                     )
                 }
                 1 -> { // Schedule Tab
-                    ScheduleTabContent(
-                        uiState = scheduleUiState,
-                        viewModel = scheduleViewModel,
-                        onChannelClick = { channel, event ->
-                            // Use channel ID to launch SchedulePlayerActivity
-                            // The player will fetch ChannelWatchPage and playerOptions
-                            val intent = SchedulePlayerActivity.createIntent(
-                                context = context,
-                                channelId = channel.id,
-                                channelName = channel.name,
-                                eventTitle = event.title
-                            )
-                            context.startActivity(intent)
+                    // If the Live playlist is still loading, show the loading state
+                    if (uiState.isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            LottieLoadingView(size = 300.dp)
                         }
-                    )
+                    } else {
+                        ScheduleTabContent(
+                            uiState = scheduleUiState,
+                            viewModel = scheduleViewModel,
+                            onChannelClick = { channel, event ->
+                                // Use channel ID to launch SchedulePlayerActivity
+                                // The player will fetch ChannelWatchPage and playerOptions
+                                val intent = SchedulePlayerActivity.createIntent(
+                                    context = context,
+                                    channelId = channel.id,
+                                    channelName = channel.name,
+                                    eventTitle = event.title
+                                )
+                                context.startActivity(intent)
+                            }
+                        )
+                    }
                 }
                 2 -> { // Channels Tab (Scraped from dlhd.pk)
                     ChannelsTabContent(

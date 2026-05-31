@@ -61,7 +61,7 @@ fun MobileMyListScreen(
     navController: NavController,
     onMovieClick: (Int) -> Unit,
     onTvShowClick: (Int) -> Unit,
-    onNavigate: (String) -> Unit = {},
+    onNavigate: (String) -> Unit,
     onCompanyClick: (Int, String) -> Unit = { _, _ -> },
     onNetworkClick: (Int, String) -> Unit = { _, _ -> },
     onCastClick: (Int, String, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }
