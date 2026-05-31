@@ -239,7 +239,7 @@ fun StreamProviderItem(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
-    
+
     // List of providers 1-9 that should show HIGH SPEED tag
     val highSpeedProviders = listOf(
         "Videasy",
@@ -252,7 +252,15 @@ fun StreamProviderItem(
         "Flixer",
         "VidCore"
     )
-    
+
+    // List of providers that support Autonext for TV
+    val autonextProviders = listOf(
+        "Vidrock",
+        "VidFast",
+        "VidCore",
+        "VidPlus"
+    )
+
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -314,11 +322,19 @@ fun StreamProviderItem(
                         }
                     }
 
-                    // Row 2: yellow label tag (if any)
-                    when (provider.name) {
-                        "Videasy" -> Tag("BEST FOR TV", Color(0xFFFFC107), Color.Black)
-                        "VidLink" -> Tag("BEST FOR MOVIES", Color(0xFFFFC107), Color.Black)
-                        "VidFast" -> Tag("MOVIES & TV", Color(0xFFFFC107), Color.Black)
+                    // Row 2: Autonext tag or yellow label tag
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // Autonext for TV tag
+                        if (provider.name in autonextProviders) {
+                            Tag("Autonext for TV", Color(0xFF9C27B0), Color.White)
+                        }
+
+                        // Original yellow label tags
+                        when (provider.name) {
+                            "Videasy" -> Tag("BEST FOR TV", Color(0xFFFFC107), Color.Black)
+                            "VidLink" -> Tag("BEST FOR MOVIES", Color(0xFFFFC107), Color.Black)
+                            "VidFast" -> Tag("MOVIES & TV", Color(0xFFFFC107), Color.Black)
+                        }
                     }
                 }
             }
@@ -343,4 +359,3 @@ fun Tag(text: String, bg: Color, fg: Color) {
         Text(text, color = fg, style = MaterialTheme.typography.labelSmall)
     }
 }
-

@@ -46,7 +46,6 @@ import com.kiduyuk.klausk.kiduyutv.R
 import com.kiduyuk.klausk.kiduyutv.data.model.ChannelWatchPage
 import com.kiduyuk.klausk.kiduyutv.data.model.PlayerOption
 import com.kiduyuk.klausk.kiduyutv.data.repository.ScheduleRepository
-import com.kiduyuk.klausk.kiduyutv.ui.player.webview.MouseCursorView
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,15 +61,8 @@ import kotlinx.coroutines.withContext
 class SchedulePlayerActivity : ComponentActivity() {
 
     private lateinit var webView: android.webkit.WebView
-    private lateinit var cursorView: MouseCursorView
     private lateinit var rootLayout: FrameLayout
-    private var cursorX = 0f
-    private var cursorY = 0f
-    private val moveSpeed = 50f
-    private var screenWidth = 0
-    private var screenHeight = 0
 
-    private var isCursorDisabled = false
     private var currentIframeHtml: String? = null
     private var channelName: String = "Channel"
     private var eventTitle: String = "Channel"
@@ -118,21 +110,9 @@ class SchedulePlayerActivity : ComponentActivity() {
         }
     }
 
-    // Unified idle timer — hides both cursor and top bar
-    private val cursorHideHandler = Handler(Looper.getMainLooper())
-    private val cursorHideRunnable = Runnable {
-        if (!isCursorDisabled && isCursorVisible) {
-            cursorView.animate().alpha(0f).setDuration(500).start()
-            isCursorVisible = false
-        }
-        hideTopBar()
-    }
-    private var isCursorVisible = false
-
     // Top bar auto-hide timer
     private val topBarHideHandler = Handler(Looper.getMainLooper())
     private val topBarHideRunnable = Runnable {
-        // FIX: reset isDpadNavigating here so future timer callbacks are not permanently blocked
         isDpadNavigating = false
         hideTopBar()
     }
@@ -160,14 +140,13 @@ class SchedulePlayerActivity : ComponentActivity() {
             return
         }
 
-        detectDeviceType()
-
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 showExitConfirmationDialog()
             }
         })
 
+        installWindowKeyInterceptor()
         setupLayout()
 
         if (hasDirectIframeUrls) {
@@ -178,7 +157,6 @@ class SchedulePlayerActivity : ComponentActivity() {
     }
 
     private fun fetchChannelWatchPage(channelId: String) {
-        // FIX: use lifecycleScope instead of raw CoroutineScope to avoid leaks
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 ScheduleRepository.getInstance().fetchChannelWatchPage(channelId)
@@ -188,7 +166,6 @@ class SchedulePlayerActivity : ComponentActivity() {
                 onSuccess = { watchPage ->
                     channelWatchPage = watchPage
 
-                    // FIX: assign to mutableStateOf-backed property so Compose reacts
                     playerOptions = watchPage.playerOptions
 
                     if (playerOptions.isEmpty()) {
@@ -244,7 +221,6 @@ class SchedulePlayerActivity : ComponentActivity() {
             Toast.LENGTH_LONG
         ).show()
 
-        // FIX: assign to mutableStateOf-backed property
         playerOptions = iframeUrls.mapIndexed { index, url ->
             PlayerOption(
                 playerNumber = index + 1,
@@ -265,14 +241,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         updateTopBar()
     }
 
-    /**
-     * FIX: Single source of truth for iframe HTML generation.
-     * Removed the duplicate in setupWithDirectIframeUrls/fetchChannelWatchPage
-     * that previously called ScheduleRepository.generateIframeHtml separately.
-     *
-     * Added allow="autoplay; encrypted-media; fullscreen" which is required for
-     * Chromium to permit autoplay inside nested iframes.
-     */
     private fun generateIframeHtml(streamUrl: String): String {
         return """
             <!DOCTYPE html>
@@ -307,19 +275,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         scheduleTopBarHide()
     }
 
-    /**
-     * FIX: Autoplay/unmute injection.
-     *
-     * The old approach injected JS into the top frame via onPageFinished, which can
-     * never reach videos inside cross-origin iframes (silent DOMException).
-     *
-     * The new approach intercepts each HTML response at the network level inside
-     * shouldInterceptRequest and injects the autoplay script directly into that
-     * frame's <head> before it parses — so it runs in the correct origin context
-     * regardless of nesting depth.
-     *
-     * This method is kept as a fallback for same-origin frames or the top-level page.
-     */
     private fun injectVideoVolumeController() {
         if (!::webView.isInitialized) return
         val jsCode = """
@@ -354,11 +309,8 @@ class SchedulePlayerActivity : ComponentActivity() {
                     } catch(e) {}
                 }
 
-                // Process top-level document
                 processVideos(document);
 
-                // Same-origin iframes only — cross-origin iframes are handled via
-                // shouldInterceptRequest injection at the network level.
                 document.querySelectorAll('iframe').forEach(function(iframe) {
                     try {
                         if (iframe.contentDocument) {
@@ -372,7 +324,6 @@ class SchedulePlayerActivity : ComponentActivity() {
                     }
                 });
 
-                // Watch for dynamically added videos in top frame
                 new MutationObserver(function(mutations) {
                     mutations.forEach(function(m) {
                         m.addedNodes.forEach(function(node) {
@@ -382,7 +333,6 @@ class SchedulePlayerActivity : ComponentActivity() {
                     });
                 }).observe(document.body, { childList: true, subtree: true });
 
-                // Retry loop — clears itself after 10 iterations
                 var retryCount = 0;
                 var retryInterval = setInterval(function() {
                     processVideos(document);
@@ -395,16 +345,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         webView.evaluateJavascript(jsCode, null)
     }
 
-    /**
-     * FIX: Intercepts every HTML response (including nested iframes) and injects
-     * the autoplay/unmute script directly into that frame's <head>.
-     *
-     * This is the only approach that reliably reaches videos inside cross-origin
-     * iframes, because the script executes in the iframe's own origin context.
-     *
-     * Falls back gracefully (returns null) on any network or parse error so the
-     * WebView loads the page normally.
-     */
     private fun tryInjectAutoplayScript(
         url: String,
         headers: Map<String, String>?
@@ -413,9 +353,8 @@ class SchedulePlayerActivity : ComponentActivity() {
             val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
             connection.connectTimeout = 5000
             connection.readTimeout = 8000
-            // Forward the original request headers so the server doesn't reject us
             headers?.forEach { (k, v) ->
-                try { connection.setRequestProperty(k, v) } catch (e: Exception) { /* skip restricted headers */ }
+                try { connection.setRequestProperty(k, v) } catch (e: Exception) { }
             }
             connection.connect()
 
@@ -482,21 +421,14 @@ class SchedulePlayerActivity : ComponentActivity() {
             )
         } catch (e: Exception) {
             android.util.Log.w(TAG, "[AutoplayInject] Failed for $url: ${e.message}")
-            null // Graceful fallback — WebView loads the URL normally
+            null
         }
     }
 
-    /**
-     * Returns true if the URL matches known ad networks, banner scripts, or
-     * ad iframe pages. Add new patterns here as they are encountered in logcat.
-     */
     private fun isAdRequest(url: String): Boolean {
         val adPatterns = listOf(
-            // Site-specific ad paths seen on dlhd.pk
             "adbanner", "rs4k-ad", "rs4k",
-            // Ad-Asia / AA network — identified by data-aa attribute in the iframe src
             "aa-ads", "adasia",
-            // Common ad networks
             "doubleclick.net", "googlesyndication.com", "googletagservices.com",
             "adservice.google", "pagead2.googlesyndication",
             "adnxs.com", "adsrvr.org",
@@ -509,10 +441,6 @@ class SchedulePlayerActivity : ComponentActivity() {
         return adPatterns.any { url.contains(it, ignoreCase = true) }
     }
 
-    /**
-     * Returns a minimal empty 200 response used to silently swallow blocked ad requests.
-     * Using 200 (not 4xx) avoids error callbacks that might trigger player fallback logic.
-     */
     private fun emptyResponse(): WebResourceResponse {
         return WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
     }
@@ -526,12 +454,13 @@ class SchedulePlayerActivity : ComponentActivity() {
             )
         }
 
-        webView = createWebView(this).apply {
+        webView = android.webkit.WebView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(0xFF000000.toInt())
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
             settings.apply {
                 javaScriptEnabled = true
@@ -545,12 +474,9 @@ class SchedulePlayerActivity : ComponentActivity() {
                 builtInZoomControls = false
                 displayZoomControls = false
                 setSupportZoom(false)
-                // FIX: setSupportMultipleWindows(false) prevents popup-style players
-                // that open a new window and break the autoplay context
                 setSupportMultipleWindows(false)
                 javaScriptCanOpenWindowsAutomatically = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                // FIX: disable cache so stale player configs don't interfere
                 cacheMode = WebSettings.LOAD_NO_CACHE
             }
 
@@ -558,12 +484,6 @@ class SchedulePlayerActivity : ComponentActivity() {
             isVerticalScrollBarEnabled = false
             setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY)
             overScrollMode = View.OVER_SCROLL_NEVER
-
-            if (isCursorDisabled) {
-                setLayerType(View.LAYER_TYPE_HARDWARE, null)
-            } else {
-                setLayerType(View.LAYER_TYPE_NONE, null)
-            }
 
             webViewClient = object : android.webkit.WebViewClient() {
 
@@ -575,17 +495,11 @@ class SchedulePlayerActivity : ComponentActivity() {
                         ?: return super.shouldInterceptRequest(view, request)
                     val headers = request.requestHeaders
 
-                    // ── Ad Blocker ────────────────────────────────────────────────
-                    // Block at the network level before anything loads or renders.
-                    // Covers both the iframe src request and any ad script/pixel URLs.
                     if (isAdRequest(url)) {
                         android.util.Log.d(TAG, "[AdBlock] Blocked: $url")
                         return emptyResponse()
                     }
 
-                    // ── Autoplay Injection ────────────────────────────────────────
-                    // Inject autoplay/unmute script into every HTML frame response,
-                    // including cross-origin nested iframes.
                     val acceptHeader = headers?.get("Accept") ?: ""
                     if (acceptHeader.contains("text/html")) {
                         val injected = tryInjectAutoplayScript(url, headers)
@@ -599,9 +513,6 @@ class SchedulePlayerActivity : ComponentActivity() {
                     super.onPageFinished(view, url)
                     android.util.Log.i(TAG, "[WebView] Page finished: $url")
 
-                    // Inject CSS to suppress ad iframes and overlays that slip
-                    // past the network block (e.g. JS-injected after page load).
-                    // The MutationObserver catches dynamically added ad nodes.
                     view?.evaluateJavascript("""
                         (function() {
                             var style = document.createElement('style');
@@ -644,7 +555,6 @@ class SchedulePlayerActivity : ComponentActivity() {
                         })();
                     """.trimIndent(), null)
 
-                    // Top-frame JS injection as a complementary fallback
                     injectVideoVolumeController()
                 }
 
@@ -675,7 +585,6 @@ class SchedulePlayerActivity : ComponentActivity() {
             }
         }
 
-        // JavaScript interface for toast messages
         webView.addJavascriptInterface(object {
             @JavascriptInterface
             fun showToast(message: String) {
@@ -685,13 +594,6 @@ class SchedulePlayerActivity : ComponentActivity() {
             }
         }, "Android")
 
-        cursorView = MouseCursorView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
-        }
-
         val composeView = ComposeView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -700,9 +602,6 @@ class SchedulePlayerActivity : ComponentActivity() {
                 topMargin = 0
             }
             setContent {
-                // FIX: playerOptions and selectedPlayerIndex are now mutableStateOf,
-                // so reading them here automatically subscribes to their changes
-                // and triggers recomposition when switchToPlayer() updates them.
                 val topBarVisible by isTopBarVisible
                 MaterialTheme {
                     AnimatedVisibility(
@@ -729,10 +628,6 @@ class SchedulePlayerActivity : ComponentActivity() {
 
         rootLayout.addView(webView)
         rootLayout.addView(composeView)
-        if (!isCursorDisabled) {
-            rootLayout.addView(cursorView)
-            cursorView.bringToFront()
-        }
 
         setContentView(rootLayout)
 
@@ -740,29 +635,12 @@ class SchedulePlayerActivity : ComponentActivity() {
         rootLayout.isFocusableInTouchMode = true
         rootLayout.requestFocus()
 
-        rootLayout.post {
-            screenWidth = rootLayout.width
-            screenHeight = rootLayout.height
-            if (!isCursorDisabled) {
-                cursorX = screenWidth / 2f
-                cursorY = screenHeight / 2f
-                updateCursorPosition()
-                showCursorAndResetTimer()
-            }
-        }
-
         scheduleTopBarHide()
     }
 
-    /**
-     * FIX: Updates selectedPlayerIndex and playerOptions together, keeping isActive in sync.
-     * Previously, isActive flags on PlayerOption were never updated when switching sources,
-     * causing the "active" concept to diverge from selectedPlayerIndex.
-     */
     private fun switchToPlayer(index: Int) {
         if (index in playerOptions.indices) {
             selectedPlayerIndex = index
-            // FIX: rebuild the list with the correct isActive flags
             playerOptions = playerOptions.mapIndexed { i, option ->
                 option.copy(isActive = i == index)
             }
@@ -798,35 +676,12 @@ class SchedulePlayerActivity : ComponentActivity() {
                 Toast.LENGTH_SHORT
             ).show()
             selectedPlayerIndex = nextIndex
-            // FIX: keep playerOptions isActive in sync here too
             playerOptions = playerOptions.mapIndexed { i, option ->
                 option.copy(isActive = i == nextIndex)
             }
             currentIframeHtml = generateIframeHtml(iframeUrls[nextIndex])
             loadCurrentStream()
         }
-    }
-
-    private fun detectDeviceType() {
-        val uiModeManager =
-            getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager
-        if (uiModeManager.currentModeType != android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) {
-            isCursorDisabled = true
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun createWebView(context: android.content.Context): android.webkit.WebView {
-        val webView = android.webkit.WebView(context)
-        val isHardwareAccelerated =
-            context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_HARDWARE_ACCELERATED != 0
-
-        if (isHardwareAccelerated) {
-            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-        } else {
-            webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-        }
-        return webView
     }
 
     private fun showExitConfirmationDialog() {
@@ -869,17 +724,15 @@ class SchedulePlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // Clear JS interval before destroying WebView
         if (::webView.isInitialized) {
             try {
                 webView.evaluateJavascript(
                     "if(window.__videoControllerInterval) clearInterval(window.__videoControllerInterval);",
                     null
                 )
-            } catch (e: Exception) { /* ignore — WebView may already be paused */ }
+            } catch (e: Exception) { }
         }
 
-        cursorHideHandler.removeCallbacks(cursorHideRunnable)
         topBarHideHandler.removeCallbacks(topBarHideRunnable)
 
         if (::webView.isInitialized) {
@@ -903,135 +756,65 @@ class SchedulePlayerActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-        if (isDpadKey(event)) {
-            isDpadNavigating = true
-            showCursorAndResetTimer()
-        }
-
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP,
-                KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_LEFT,
-                KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER -> return onKeyDown(event.keyCode, event)
+    /**
+     * Wraps the Window.Callback so we can intercept key events before the
+     * WebView (or any child view) consumes them — without touching the
+     * restricted ComponentActivity.dispatchKeyEvent API.
+     *
+     * Installed once in onCreate(); the original callback is always called
+     * for every event we do not explicitly consume.
+     */
+    private fun installWindowKeyInterceptor() {
+        val original = window.callback
+        window.callback = object : android.view.Window.Callback by original {
+            override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+                if (event.action == KeyEvent.ACTION_DOWN &&
+                    (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                            event.keyCode == KeyEvent.KEYCODE_ENTER)
+                ) {
+                    toggleTopBar()
+                    return true // consumed — WebView never sees this event
+                }
+                return original.dispatchKeyEvent(event)
             }
         }
-        return super.dispatchKeyEvent(event)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (isDpadKeyCode(keyCode)) {
-            isDpadNavigating = true
-            showCursorAndResetTimer()
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_MENU,
+            KeyEvent.KEYCODE_SETTINGS -> {
+                isDpadNavigating = true
+                showTopBarAndResetTimer()
+            }
         }
+        return super.onKeyDown(keyCode, event)
+    }
 
-        if (isCursorDisabled) return super.onKeyDown(keyCode, event)
-
-        return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                showCursorAndResetTimer()
-                cursorY = (cursorY - moveSpeed).coerceAtLeast(0f)
-                updateCursorPosition()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                showCursorAndResetTimer()
-                cursorY = (cursorY + moveSpeed).coerceAtMost(screenHeight.toFloat())
-                updateCursorPosition()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                showCursorAndResetTimer()
-                cursorX = (cursorX - moveSpeed).coerceAtLeast(0f)
-                updateCursorPosition()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                showCursorAndResetTimer()
-                cursorX = (cursorX + moveSpeed).coerceAtMost(screenWidth.toFloat())
-                updateCursorPosition()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER -> {
-                showCursorAndResetTimer()
-                simulateClick(cursorX, cursorY)
-                true
-            }
-            else -> super.onKeyDown(keyCode, event)
+    /**
+     * Toggles the top bar:
+     * - If hidden  → show it and start the 5-second auto-hide timer.
+     * - If visible → hide it immediately and cancel any pending timer.
+     */
+    private fun toggleTopBar() {
+        if (isTopBarVisible.value) {
+            topBarHideHandler.removeCallbacks(topBarHideRunnable)
+            hideTopBar()
+        } else {
+            showTopBarAndResetTimer()
         }
     }
 
-    private fun isDpadKey(event: KeyEvent): Boolean {
-        return event.source and android.view.InputDevice.SOURCE_DPAD ==
-                android.view.InputDevice.SOURCE_DPAD ||
-                event.keyCode in listOf(
-                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
-                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-                    KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS
-                )
-    }
 
-    private fun isDpadKeyCode(keyCode: Int): Boolean {
-        return keyCode in listOf(
-            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS
-        )
-    }
 
-    private fun updateCursorPosition() {
-        if (isCursorDisabled) return
-        cursorView.x = cursorX
-        cursorView.y = cursorY
-        cursorView.bringToFront()
-        cursorView.invalidate()
-    }
-
-    private fun simulateClick(x: Float, y: Float) {
-        val downTime = android.os.SystemClock.uptimeMillis()
-        val eventTime = android.os.SystemClock.uptimeMillis()
-
-        val downEvent = android.view.MotionEvent.obtain(
-            downTime, eventTime,
-            android.view.MotionEvent.ACTION_DOWN, x, y, 0
-        )
-        val upEvent = android.view.MotionEvent.obtain(
-            downTime, eventTime + 100,
-            android.view.MotionEvent.ACTION_UP, x, y, 0
-        )
-
-        downEvent.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-        upEvent.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-
-        window.decorView.dispatchTouchEvent(downEvent)
-        window.decorView.dispatchTouchEvent(upEvent)
-
-        downEvent.recycle()
-        upEvent.recycle()
-    }
-
-    private fun showCursorAndResetTimer() {
+    private fun showTopBarAndResetTimer() {
         isTopBarVisible.value = true
         topBarHideHandler.removeCallbacks(topBarHideRunnable)
         topBarHideHandler.postDelayed(topBarHideRunnable, TOPBAR_HIDE_DELAY_MS)
-
-        if (isCursorDisabled) {
-            cursorHideHandler.removeCallbacks(cursorHideRunnable)
-            cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
-            return
-        }
-
-        cursorView.animate().cancel()
-        cursorView.alpha = 1f
-        isCursorVisible = true
-        cursorHideHandler.removeCallbacks(cursorHideRunnable)
-        cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
     }
 }
 
@@ -1133,9 +916,9 @@ private fun BackButton(
 
     Surface(
         modifier = Modifier
-            .focusable()
-            .onFocusChanged { focusState -> isFocused = focusState.isFocused }
-            .clickable { onBackPressed() },
+            .clickable { onBackPressed() }
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable(),
         shape = RoundedCornerShape(8.dp),
         color = if (isFocused) Color(0xFF424242) else Color.Transparent,
         border = if (isFocused) BorderStroke(1.dp, Color(0xFF448AFF)) else null
@@ -1179,9 +962,16 @@ private fun PlayerOptionButton(
 
     Surface(
         modifier = Modifier
-            .focusable()
-            .onFocusChanged { focusState -> isFocused = focusState.isFocused }
-            .clickable { onClick() },
+            // clickable must come first — it creates the single focus node.
+            // onFocusChanged placed after observes that same node correctly.
+            // A bare focusable() after clickable() is a no-op but kept for
+            // explicitness so the TV focus system never skips this node.
+            .clickable(
+                onClick = onClick,
+                onClickLabel = "Select Server $playerNumber"
+            )
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable(),
         shape = RoundedCornerShape(8.dp),
         color = backgroundColor,
         border = BorderStroke(2.dp, borderColor)

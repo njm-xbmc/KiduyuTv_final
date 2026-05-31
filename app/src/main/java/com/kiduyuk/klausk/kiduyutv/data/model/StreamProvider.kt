@@ -206,7 +206,98 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 10. VidSrc (WTF) v4 - Premium
+        // 10. Peachify
+        // ═══════════════════════════════════════════════════════════════
+        StreamProvider(
+            name = "Peachify",
+            movieUrlTemplate = "https://peachify.top/embed/movie/%d",
+            tvUrlTemplate = "https://peachify.top/embed/tv/%d/%d/%d",
+            movieParameters = { _, _ ->
+                mapOf("sub" to "English")
+            },
+            tvParameters = { _, _, _, _ ->
+                mapOf(
+                    "sub" to "English",
+                    "autoNext" to "30"
+                )
+            }
+        ),
+
+        // ═══════════════════════════════════════════════════════════════
+        // 11. VidAPI
+        // ═══════════════════════════════════════════════════════════════
+        StreamProvider(
+            name = "VidAPI",
+            movieUrlTemplate = "https://vaplayer.ru/embed/movie/%d",
+            tvUrlTemplate = "https://vaplayer.ru/embed/tv/%d/%d/%d",
+            movieParameters = { _, _ ->
+                mapOf(
+                    "autoplay" to "1",
+                    "overlay" to "true"
+                )
+            },
+            tvParameters = { _, _, _, _ ->
+                mapOf(
+                    "autoplay" to "1",
+                    "overlay" to "true"
+                )
+            }
+        ),
+
+        // ═══════════════════════════════════════════════════════════════
+        // 12. VidPlus
+        // ═══════════════════════════════════════════════════════════════
+        StreamProvider(
+            name = "VidPlus",
+            movieUrlTemplate = "https://player.vidplus.to/embed/movie/%d",
+            tvUrlTemplate = "https://player.vidplus.to/embed/tv/%d/%d/%d",
+            movieParameters = { _, _ ->
+                mapOf(
+                    "autoplay" to "true",
+                    "autoNext" to "true",
+                    "nextButton" to "true",
+                    "poster" to "true",
+                    "title" to "true",
+                    "episodelist" to "true",
+                    "servericon" to "true"
+                )
+            },
+            tvParameters = { _, _, _, _ ->
+                mapOf(
+                    "autoplay" to "true",
+                    "autoNext" to "true",
+                    "poster" to "true",
+                    "title" to "true",
+                    "servericon" to "true"
+                )
+            }
+        ),
+
+        // ═══════════════════════════════════════════════════════════════
+        // 13. vidsrc.sbs
+        // ═══════════════════════════════════════════════════════════════
+        StreamProvider(
+            name = "vidsrc.sbs",
+            movieUrlTemplate = "https://vidsrc.sbs/embed/movie/%d",
+            tvUrlTemplate = "https://vidsrc.sbs/embed/tv/%d/%d/%d",
+            movieParameters = { _, _ ->
+                mapOf(
+                    "autoplay" to "1",
+                    "sub" to "en",
+                    "controls" to "1"
+                )
+            },
+            tvParameters = { _, _, _, _ ->
+                mapOf(
+                    "autoplay" to "1",
+                    "sub" to "en",
+                    "controls" to "1"
+                )
+            }
+        ),
+
+        // ═══════════════════════════════════════════════════════════════
+        // 14. VidSrc (WTF) v4 - Premium
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "VidSrc (WTF) v4",
@@ -215,7 +306,7 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 11. PrimeSrc
+        // 15. PrimeSrc
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "PrimeSrc",
@@ -226,7 +317,7 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 12. VidSrc (WTF) v3 - Multi Providers
+        // 16. VidSrc (WTF) v3 - Multi Providers
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "VidSrc (WTF) v3 - Multi Providers",
