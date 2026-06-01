@@ -563,6 +563,16 @@ object FirebaseManager {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
+     * Clear all saved channels from Firebase.
+     * Used before re-uploading the merged favorites list during two-way sync.
+     */
+    fun clearSavedChannels() {
+        database.getReference("${getCurrentUserPath()}/savedChannels")
+            .removeValue()
+        Log.i(TAG, "Cleared savedChannels node in Firebase")
+    }
+
+    /**
      * Save a channel to the user's savedChannels list.
      */
     fun saveChannel(

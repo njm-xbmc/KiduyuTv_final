@@ -171,6 +171,87 @@ class LiveTvViewModel : ViewModel() {
     }
     
     /**
+     * Syncs favorite channels bidirectionally with Firebase.
+     * Call this when user explicitly requests refresh of their favorite channels.
+     * Implements two-way sync:
+     * 1. Downloads favorites from Firebase
+     * 2. Merges with local favorites
+     * 3. Uploads merged list back to Firebase
+     * 4. Updates local storage
+     */
+    fun syncFavoriteChannelsWithFirebase() {
+        viewModelScope.launch {
+            try {
+                val context = appContext ?: return@launch
+                
+                // 1. Download from Firebase
+                val cloudFavorites = mutableListOf<IptvChannel>()
+                val firebaseData = com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.getSavedChannelsOnce()
+                
+                if (firebaseData != null && firebaseData.isNotEmpty()) {
+                    firebaseData.forEach { (_, value) ->
+                        if (value is Map<*, *>) {
+                            val channel = IptvChannel(
+                                name = value["name"] as? String ?: "",
+                                url = value["url"] as? String ?: "",
+                                logo = value["logo"] as? String ?: "",
+                                tvgId = value["tvgId"] as? String ?: "",
+                                tvgName = value["tvgName"] as? String ?: "",
+                                group = value["group"] as? String ?: ""
+                            )
+                            cloudFavorites.add(channel)
+                        }
+                    }
+                }
+                
+                // 2. Get local favorites
+                val localFavorites = getFavoriteChannels().toMutableList()
+                
+                // 3. Merge (cloud + local-only)
+                val merged = mutableListOf<IptvChannel>()
+                val seenUrls = mutableSetOf<String>()
+                
+                // Add cloud first
+                cloudFavorites.forEach { fav ->
+                    if (!seenUrls.contains(fav.url)) {
+                        merged.add(fav)
+                        seenUrls.add(fav.url)
+                    }
+                }
+                
+                // Add local-only (not in cloud)
+                localFavorites.forEach { localFav ->
+                    if (!seenUrls.contains(localFav.url)) {
+                        merged.add(localFav)
+                        seenUrls.add(localFav.url)
+                    }
+                }
+                
+                // 4. Clear Firebase and re-upload merged
+                com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.clearSavedChannels()
+                merged.forEach { channel ->
+                    val key = Base64.encodeToString(channel.url.toByteArray(), Base64.NO_WRAP)
+                    com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.saveChannel(
+                        key = key,
+                        name = channel.name,
+                        logo = channel.logo,
+                        url = channel.url,
+                        group = channel.group
+                    )
+                }
+                
+                // 5. Update local storage
+                saveFavoriteChannels(merged)
+                
+                android.util.Log.i("LiveTvViewModel", "Synced ${merged.size} favorite channels with Firebase")
+            } catch (e: Exception) {
+                android.util.Log.e("LiveTvViewModel", "Error syncing favorites with Firebase", e)
+
+            }
+        }
+    }
+    
+    /**
      * Loads the IPTV playlist from the remote server or cache.
      *
      * @param forceRefresh If true, bypasses cache and fetches from network

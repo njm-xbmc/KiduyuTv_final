@@ -215,6 +215,10 @@ fun LiveTvScreen(
                     }
                 }
                 2 -> { // My Channels (favorited)
+                    // Trigger two-way sync when user views My Channels tab
+                    LaunchedEffect(Unit) {
+                        viewModel.syncFavoriteChannelsWithFirebase()
+                    }
                     FavoriteChannelsTabContent(
                         favorites = viewModel.getFavoriteChannels(),
                         onChannelClick = { channel -> viewModel.selectChannel(channel) }
