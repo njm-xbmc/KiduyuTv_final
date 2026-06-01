@@ -37,6 +37,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -1819,6 +1824,14 @@ private fun ChannelsContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.key == Key.Back && keyEvent.type == KeyEventType.KeyUp) {
+                    onBackClick()
+                    true
+                } else {
+                    false
+                }
+            }
     ) {
         // Back button and category title
         Row(
