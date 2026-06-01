@@ -6,6 +6,7 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.ValueEventListener
 import com.kiduyuk.klausk.kiduyutv.data.local.database.DatabaseManager
+import com.kiduyuk.klausk.kiduyutv.data.model.IptvChannel
 import com.kiduyuk.klausk.kiduyutv.data.repository.MyListManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * FirebaseSyncManager - Handles synchronization between local Room database and Firebase Realtime Database.
@@ -57,7 +60,7 @@ object FirebaseSyncManager {
     val syncMessage: StateFlow<String> = _syncMessage.asStateFlow()
     
     // Total steps for progress calculation
-    private val TOTAL_SYNC_STEPS = 6 // MyList, Companies, Networks, Casts, WatchHistory, DefaultProvider
+    private val TOTAL_SYNC_STEPS = 7 // MyList, Companies, Networks, Casts, WatchHistory, FavoriteChannels, DefaultProvider
     
     // Active listeners for cleanup
     private val activeListeners = mutableListOf<com.google.firebase.database.Query>()
@@ -226,9 +229,14 @@ object FirebaseSyncManager {
                 _syncProgress.value = 5
                 syncWatchHistory(forceRefresh)
                 
-                // Step 6: Sync Default Provider
-                _syncMessage.value = "Syncing Preferences..."
+                // Step 6: Sync Favorite Channels
+                _syncMessage.value = "Syncing Favorite Channels..."
                 _syncProgress.value = 6
+                syncFavoriteChannels(forceRefresh)
+                
+                // Step 7: Sync Default Provider
+                _syncMessage.value = "Syncing Preferences..."
+                _syncProgress.value = 7
                 syncDefaultProvider()
                 
                 // Calculate total items synced
@@ -535,6 +543,100 @@ object FirebaseSyncManager {
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing movie: $tmdbIdStr", e)
             }
+        }
+    }
+    
+    /**
+     * Sync Favorite Channels from Firebase to local SharedPreferences.
+     * Merges cloud favorites with local favorites, giving priority to cloud data.
+     */
+    private suspend fun syncFavoriteChannels(forceRefresh: Boolean) {
+        try {
+            val context = applicationContext ?: return
+            val firebaseChannels = FirebaseManager.getSavedChannelsOnce()
+            
+            if (firebaseChannels != null && firebaseChannels.isNotEmpty()) {
+                Log.i(TAG, "Found ${firebaseChannels.size} favorite channels in Firebase")
+                
+                // Get current local favorites
+                val prefs = context.getSharedPreferences("live_tv_prefs", Context.MODE_PRIVATE)
+                val localFavoritesJson = prefs.getString("favorites", "[]")
+                val localFavorites = mutableListOf<IptvChannel>()
+                
+                try {
+                    val jsonArray = JSONArray(localFavoritesJson)
+                    for (i in 0 until jsonArray.length()) {
+                        val jsonObj = jsonArray.getJSONObject(i)
+                        val channel = IptvChannel(
+                            name = jsonObj.optString("name", ""),
+                            url = jsonObj.optString("url", ""),
+                            logo = jsonObj.optString("logo", ""),
+                            tvgId = jsonObj.optString("tvgId", ""),
+                            tvgName = jsonObj.optString("tvgName", ""),
+                            group = jsonObj.optString("group", "")
+                        )
+                        localFavorites.add(channel)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing local favorites", e)
+                }
+                
+                // Convert Firebase channels to IptvChannel objects
+                val cloudFavorites = mutableListOf<IptvChannel>()
+
+                firebaseChannels.forEach { (key, value) ->
+                    try {
+                        if (value is Map<*, *>) {
+                            val channel = IptvChannel(
+                                name = value["name"] as? String ?: "",
+                                url = value["url"] as? String ?: "",
+                                logo = value["logo"] as? String ?: "",
+                                tvgId = value["tvgId"] as? String ?: "",
+                                tvgName = value["tvgName"] as? String ?: "",
+                                group = value["group"] as? String ?: ""
+                            )
+
+                            cloudFavorites.add(channel)
+                            Log.i(TAG, "Synced favorite channel: ${channel.name}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error converting favorite channel: $key", e)
+                    }
+                }
+                
+                // Merge: Cloud favorites + local favorites not in cloud
+                val mergedFavorites = mutableListOf<IptvChannel>()
+                mergedFavorites.addAll(cloudFavorites) // Add all cloud favorites first
+                
+                // Add local-only favorites (not already in cloud)
+                localFavorites.forEach { localFav ->
+                    if (!cloudFavorites.any { it.url == localFav.url }) {
+                        mergedFavorites.add(localFav)
+                    }
+                }
+                
+                // Save merged favorites to local SharedPreferences
+                val mergedJsonArray = JSONArray()
+                mergedFavorites.forEach { channel ->
+                    val jsonObj = JSONObject().apply {
+                        put("name", channel.name)
+                        put("url", channel.url)
+                        put("logo", channel.logo)
+                        put("tvgId", channel.tvgId)
+                        put("tvgName", channel.tvgName)
+                        put("group", channel.group)
+                    }
+                    mergedJsonArray.put(jsonObj)
+                }
+                
+                prefs.edit().putString("favorites", mergedJsonArray.toString()).apply()
+                Log.i(TAG, "Synced ${mergedFavorites.size} favorite channels to local storage")
+                
+            } else {
+                Log.i(TAG, "No favorite channels found in Firebase")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing Favorite Channels", e)
         }
     }
     

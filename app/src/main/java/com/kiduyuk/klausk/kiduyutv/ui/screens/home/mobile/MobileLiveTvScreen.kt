@@ -8,13 +8,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -38,6 +38,7 @@ fun MobileLiveTvScreen(
     val context = LocalContext.current
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val uiState by viewModel.uiState.collectAsState()
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         viewModel.initialize(context)
@@ -58,14 +59,14 @@ fun MobileLiveTvScreen(
             .fillMaxSize()
             .padding(innerPadding)) {
 
-            if (uiState.isLoading) {
+            if (uiState.isLoading && selectedTab == 0) {
                 Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     LottieLoadingView(size = 200.dp)
                 }
                 return@Box
             }
 
-            if (uiState.error != null) {
+            if (uiState.error != null && selectedTab == 0) {
                 Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Text(text = "${uiState.error}")
                     Spacer(modifier = Modifier.height(12.dp))
@@ -76,34 +77,93 @@ fun MobileLiveTvScreen(
                 return@Box
             }
 
-            // Categories view
-            if (uiState.selectedCategory == null) {
-                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
-                    items(uiState.categories) { category ->
-                        CategoryRow(category.name, category.channelCount) {
-                            viewModel.selectCategory(category.name)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Tab row
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Black,
+                    contentColor = Color.White
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Live TV") }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("My Channels") }
+                    )
                 }
-            } else {
-                // Channels list for selected category
-                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
-                    items(uiState.channels) { channel ->
-                        ChannelRow(channel) { selected ->
-                            // Launch player activity directly; this screen does not use Compose navigation for playback.
-                            val intent = IptvPlayerActivity.createIntent(
-                                context,
-                                selected.name,
-                                selected.url,
-                                selected.logo,
-                                selected.tvgId,
-                                selected.tvgName,
-                                selected.group
-                            )
-                            context.startActivity(intent)
+
+                // Tab content
+                when (selectedTab) {
+                    0 -> {
+                        // Live TV tab - categories and channels
+                        if (uiState.selectedCategory == null) {
+                            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+                                items(uiState.categories) { category ->
+                                    CategoryRow(category.name, category.channelCount) {
+                                        viewModel.selectCategory(category.name)
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+                        } else {
+                            // Channels list for selected category
+                            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+                                items(uiState.channels) { channel ->
+                                    ChannelRow(channel) { selected ->
+                                        val intent = IptvPlayerActivity.createIntent(
+                                            context,
+                                            selected.name,
+                                            selected.url,
+                                            selected.logo,
+                                            selected.tvgId,
+                                            selected.tvgName,
+                                            selected.group
+                                        )
+                                        context.startActivity(intent)
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    1 -> {
+                        // My Channels tab - favorites
+                        val favorites = viewModel.getFavoriteChannels()
+                        if (favorites.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(text = "No favorite channels yet")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(text = "Long-press a channel to add it to favorites")
+                            }
+                        } else {
+                            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+                                items(favorites) { channel ->
+                                    ChannelRow(channel) { selected ->
+                                        val intent = IptvPlayerActivity.createIntent(
+                                            context,
+                                            selected.name,
+                                            selected.url,
+                                            selected.logo,
+                                            selected.tvgId,
+                                            selected.tvgName,
+                                            selected.group
+                                        )
+                                        context.startActivity(intent)
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+                            }
+                        }
                     }
                 }
             }

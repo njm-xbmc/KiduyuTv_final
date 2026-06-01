@@ -48,6 +48,7 @@ import com.kiduyuk.klausk.kiduyutv.BuildConfig
 import com.kiduyuk.klausk.kiduyutv.ui.theme.*
 import com.kiduyuk.klausk.kiduyutv.util.SettingsManager
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SettingsViewModel
+import com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel
 import androidx.compose.foundation.Image
 import com.kiduyuk.klausk.kiduyutv.R
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
@@ -104,6 +105,7 @@ fun SettingsScreen(
     var selectedSection by remember { mutableStateOf(SettingsSection.ACCOUNT) }
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val liveTvViewModel: LiveTvViewModel = viewModel()
 
     // Focus management for TV
     val accountNavFocusRequester = remember { FocusRequester() }
@@ -327,7 +329,19 @@ fun SettingsScreen(
                         firebaseSyncSuccess = uiState.firebaseSyncSuccess,
                         firebaseSyncError = uiState.firebaseSyncError,
                         firebaseItemsSynced = uiState.firebaseItemsSynced,
-                        onSyncWithFirebaseClick = { viewModel.syncDataWithFirebase(context) }
+                        onSyncWithFirebaseClick = { viewModel.syncDataWithFirebase(context) },
+                        // Local Favorites
+                        onClearLocalFavoritesClick = {
+                            QuitDialog(
+                                context = context,
+                                title = "Clear Local Favorites?",
+                                message = "Remove all favorite channels from this device?\n\nCloud-saved favorites will not be affected. You can re-sync from Firebase in Settings.",
+                                positiveButtonText = "Clear",
+                                negativeButtonText = "Cancel",
+                                lottieAnimRes = R.raw.exit,
+                                onYes = { liveTvViewModel.clearAllLocalFavorites() }
+                            ).show()
+                        }
                     )
                 }
 
@@ -625,7 +639,9 @@ private fun AppSettingsContent(
     firebaseSyncSuccess: Boolean = false,
     firebaseSyncError: String? = null,
     firebaseItemsSynced: Int? = null,
-    onSyncWithFirebaseClick: () -> Unit = {}
+    onSyncWithFirebaseClick: () -> Unit = {},
+    // Local Favorites
+    onClearLocalFavoritesClick: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -773,6 +789,23 @@ private fun AppSettingsContent(
             showSuccess = watchHistoryClearSuccess,
             icon = Icons.Default.History,
             onClick = onClearWatchHistoryClick
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // ── 3a. My Channels (Local Favorites) ──────────────────────────
+        SettingsSectionLabel(text = "My Channels")
+
+        SettingsActionCard(
+            description = "Remove all favorite channels from this device. " +
+                    "Cloud-saved favorites will not be affected.",
+            buttonLabel = "Clear Local Favorites",
+            isLoading = false,
+            loadingLabel = "Clearing...",
+            successMessage = "Local favorites cleared!",
+            showSuccess = false,
+            icon = Icons.Default.PlaylistRemove,
+            onClick = onClearLocalFavoritesClick
         )
 
         Spacer(modifier = Modifier.height(28.dp))

@@ -698,11 +698,24 @@ class IptvPlayerActivity : AppCompatActivity() {
         btnFavorite.setImageResource(
             if (isSaved) android.R.drawable.star_big_on else android.R.drawable.star_big_off
         )
+        // Tint to red when favorited
+        if (isSaved) {
+            btnFavorite.setColorFilter(
+                android.graphics.Color.RED,
+                android.graphics.PorterDuff.Mode.SRC_IN
+            )
+        } else {
+            btnFavorite.clearColorFilter()
+        }
     }
 
     private fun confirmAddFavorite(channel: IptvChannel) {
         if (liveTvViewModel.isFavorite(channel)) {
             btnFavorite.setImageResource(android.R.drawable.star_big_on)
+            btnFavorite.setColorFilter(
+                android.graphics.Color.RED,
+                android.graphics.PorterDuff.Mode.SRC_IN
+            )
             Toast.makeText(this, "Channel already in favorites", Toast.LENGTH_SHORT).show()
             return
         }
@@ -713,6 +726,10 @@ class IptvPlayerActivity : AppCompatActivity() {
             .setPositiveButton("Add") { _, _ ->
                 liveTvViewModel.addFavorite(channel)
                 btnFavorite.setImageResource(android.R.drawable.star_big_on)
+                btnFavorite.setColorFilter(
+                    android.graphics.Color.RED,
+                    android.graphics.PorterDuff.Mode.SRC_IN
+                )
                 Toast.makeText(this, "Added to favorites", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)

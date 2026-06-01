@@ -1965,7 +1965,6 @@ private fun ChannelsContent(
  * Card component for displaying a channel.
  */
 @Composable
-
 private fun ChannelCard(
     channel: IptvChannel,
     modifier: Modifier = Modifier,
@@ -1975,6 +1974,15 @@ private fun ChannelCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val context = LocalContext.current
+    var isLongPressJustOccurred by remember { mutableStateOf(false) }
+
+    // Clear the long-press flag after 300ms to allow normal clicks again
+    LaunchedEffect(isLongPressJustOccurred) {
+        if (isLongPressJustOccurred) {
+            kotlinx.coroutines.delay(300)
+            isLongPressJustOccurred = false
+        }
+    }
 
     Box(
         modifier = modifier
@@ -1994,6 +2002,7 @@ private fun ChannelCard(
                     keyEvent.nativeKeyEvent.isLongPress
                 ) {
                     onLongClick()
+                    isLongPressJustOccurred = true
                     true
                 } else {
                     false
@@ -2002,8 +2011,16 @@ private fun ChannelCard(
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick,
-                onLongClick = onLongClick
+                onClick = {
+                    // Only fire onClick if it's not immediately after a long-press
+                    if (!isLongPressJustOccurred) {
+                        onClick()
+                    }
+                },
+                onLongClick = {
+                    isLongPressJustOccurred = true
+                    onLongClick?.invoke()
+                }
             )
             .padding(12.dp),
         contentAlignment = Alignment.Center

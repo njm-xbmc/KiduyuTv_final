@@ -594,6 +594,21 @@ object FirebaseManager {
     }
 
     /**
+     * Get saved channels (favorites) synchronously for one-time read during sync.
+     */
+    suspend fun getSavedChannelsOnce(): Map<String, Any>? {
+        return try {
+            database.getReference("${getCurrentUserPath()}/savedChannels")
+                .get()
+                .await()
+                .value as? Map<String, Any>
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching saved channels", e)
+            null
+        }
+    }
+
+    /**
      * Get saved channels flow for reactive updates.
      */
     fun getSavedChannelsFlow(): Flow<Map<String, Any>?> = callbackFlow {

@@ -162,6 +162,13 @@ class LiveTvViewModel : ViewModel() {
     fun isFavorite(channel: IptvChannel): Boolean {
         return getFavoriteChannels().any { it.url == channel.url }
     }
+
+    /**
+     * Clears all favorite channels from local storage only (does not affect Firebase).
+     */
+    fun clearAllLocalFavorites() {
+        prefs?.edit()?.putString(FAVORITES_KEY, "[]")?.apply()
+    }
     
     /**
      * Loads the IPTV playlist from the remote server or cache.

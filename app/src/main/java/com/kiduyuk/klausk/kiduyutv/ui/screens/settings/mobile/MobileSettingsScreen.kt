@@ -52,6 +52,7 @@ import com.kiduyuk.klausk.kiduyutv.util.AdManager
 import com.kiduyuk.klausk.kiduyutv.util.SettingsManager
 import com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager
 import com.kiduyuk.klausk.kiduyutv.viewmodel.SettingsViewModel
+import com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel
 import com.android.volley.Request
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
@@ -69,6 +70,7 @@ fun MobileSettingsScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val liveTvViewModel: LiveTvViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     val myList by MyListManager.myList.collectAsState()
@@ -392,6 +394,33 @@ fun MobileSettingsScreen(
                     title = "My List",
                     subtitle = "${myList.size} items saved",
                     onClick = onMyListClick
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── My Channels (Favorites) Section ──────────────────────────────────
+            SettingsGroup(title = "My Channels") {
+                val favoriteChannels = liveTvViewModel.getFavoriteChannels()
+                SettingsItem(
+                    icon = Icons.Default.PlaylistRemove,
+                    title = "Clear Local Favorites",
+                    subtitle = "${favoriteChannels.size} channels saved (local only)",
+                    onClick = {
+                        QuitDialog(
+                            context = context,
+                            title = "Clear Local Favorites?",
+                            message = "Remove all favorite channels from this device?\n\nCloud-saved favorites will not be affected. You can re-sync from Firebase in Settings.",
+                            positiveButtonText = "Clear",
+                            negativeButtonText = "Cancel",
+                            lottieAnimRes = R.raw.exit,
+                            onNo = {},
+                            onYes = {
+                                liveTvViewModel.clearAllLocalFavorites()
+                                Toast.makeText(context, "Local favorites cleared", Toast.LENGTH_SHORT).show()
+                            }
+                        ).show()
+                    }
                 )
             }
 
