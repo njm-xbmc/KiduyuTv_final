@@ -1334,7 +1334,6 @@ private fun ProviderOptionItem(
             )
             .focusable(interactionSource = interactionSource)
             .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
