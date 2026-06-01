@@ -124,9 +124,12 @@ class YouTubePlayerActivity : AppCompatActivity() {
                         onVideoStarted()
                     }
                     PlayerConstants.PlayerState.BUFFERING -> {
-                        // Video is buffering - update text to show buffering status
+                        // Video is buffering - stop the timeout fallback and hide the loading overlay
+                        handler.removeCallbacks(loadingTimeoutRunnable)
+
                         runOnUiThread {
-                            loadingText.text = "Buffering..."
+                            loadingText.text = "Buffering"
+                            hideLoading()
                         }
                     }
                     PlayerConstants.PlayerState.ENDED -> {
@@ -134,7 +137,7 @@ class YouTubePlayerActivity : AppCompatActivity() {
                     }
                     else -> {
                         // Other states (UNSTARTED, PAUSED, VIDEO_CUED, UNKNOWN)
-                        // Keep the loading overlay visible
+                        // Keep the loading overlay visible for now
                     }
                 }
             }

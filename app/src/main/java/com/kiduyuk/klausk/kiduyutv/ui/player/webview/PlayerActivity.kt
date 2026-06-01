@@ -469,13 +469,21 @@ class PlayerActivity : AppCompatActivity() {
 }
 
 /**
- * AdBlockerWebViewClient - Handles ad blocking and page lifecycle events
+ * AdBlockerWebViewClient - Handles ad blocking and page lifecycle events.
+ *
+ * Blocks ads at two layers:
+ *   1. Network layer (shouldInterceptRequest) — prevents the request from ever being made,
+ *      saving bandwidth and stopping tracking pixels early.
+ *   2. DOM layer (onPageFinished JS injection) — removes any ad elements that were already
+ *      embedded in the HTML before the network layer could intercept them, including
+ *      <video id="ad-video"> overlay ads injected by the page itself.
  */
 private class AdBlockerWebViewClient(
     private val onPageFinished: () -> Unit,
     private val onError: () -> Unit
 ) : WebViewClient() {
 
+    // ── Network-level blocklist ───────────────────────────────────────────────
     private val adDomains = setOf(
         "doubleclick.net", "googlesyndication.com", "googleadservices.com",
         "adnxs.com", "advertising.com", "adsystem.com", "adserver.com",
@@ -489,15 +497,43 @@ private class AdBlockerWebViewClient(
         "adtechtraffic.com", "bet365.com", "1xbet.com", "cloud.mail.ru"
     )
 
+    /**
+     * Known ad video URL path segments. These are matched against the full request URL
+     * so that ad videos hosted on otherwise-legitimate CDNs (e.g. raw.githubusercontent.com)
+     * are still blocked without having to blanket-block the entire domain.
+     *
+     * Add new entries here whenever a new ad video source is discovered — one entry per
+     * distinct path prefix or filename pattern is sufficient.
+     */
+    private val adVideoUrlPatterns = setOf(
+        // The specific ad video observed in the wild:
+        // <video id="ad-video" src="https://raw.githubusercontent.com/michel8899/test/refs/heads/main/two.mp4">
+        "raw.githubusercontent.com/michel8899"
+    )
+
+    // ── Network interception ──────────────────────────────────────────────────
+
     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
         val url = request?.url?.toString()?.lowercase() ?: return null
 
+        // Block known ad domains
         if (adDomains.any { url.contains(it) }) {
-            return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream("".toByteArray()))
+            return emptyResponse()
+        }
+
+        // Block known ad video URL patterns
+        if (adVideoUrlPatterns.any { url.contains(it) }) {
+            return emptyResponse()
         }
 
         return super.shouldInterceptRequest(view, request)
     }
+
+    /** Returns an empty 200 response, effectively silencing the blocked request. */
+    private fun emptyResponse(): WebResourceResponse =
+        WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream("".toByteArray()))
+
+    // ── DOM-level cleanup (runs after page load) ──────────────────────────────
 
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
@@ -506,16 +542,86 @@ private class AdBlockerWebViewClient(
         view?.evaluateJavascript(
             """
             (function() {
+                // ── Inject CSS to hide common ad containers ──────────────────
                 var style = document.createElement('style');
-                style.innerHTML = 'div[id^="ad"], div[class^="ad"], .popup, .overlay { display: none !important; }';
+                style.innerHTML = [
+                    'div[id^="ad"], div[class^="ad"], .popup, .overlay { display: none !important; }',
+                    // Hide the ad-video element by id and also by common wrapper patterns
+                    '#ad-video, [id*="ad-video"], [class*="ad-video"] { display: none !important; }',
+                    // Hide any full-cover overlay containers that wrap ad videos
+                    'div[style*="position: fixed"], div[style*="position:fixed"] { pointer-events: none; }'
+                ].join(' ');
                 document.head.appendChild(style);
 
-                var ads = document.querySelectorAll('div[id^="ad"], div[class^="ad"], iframe[src*="doubleclick"], iframe[src*="google"]');
-                ads.forEach(function(ad) { ad.remove(); });
+                // ── Remove ad DOM nodes immediately ──────────────────────────
+                var selectors = [
+                    'div[id^="ad"]',
+                    'div[class^="ad"]',
+                    'iframe[src*="doubleclick"]',
+                    'iframe[src*="google"]',
+                    '#ad-video',
+                    '[id*="ad-video"]',
+                    '[class*="ad-video"]'
+                ];
+                document.querySelectorAll(selectors.join(',')).forEach(function(el) {
+                    el.remove();
+                });
+
+                // ── Remove any <video> whose src matches known ad patterns ───
+                var adVideoPatterns = [
+                    'raw.githubusercontent.com/michel8899'
+                ];
+                document.querySelectorAll('video').forEach(function(v) {
+                    var src = (v.src || v.getAttribute('src') || '').toLowerCase();
+                    var isAd = adVideoPatterns.some(function(p) { return src.indexOf(p) !== -1; });
+                    // Also treat any video with id="ad-video" as an ad regardless of src
+                    if (isAd || v.id === 'ad-video') {
+                        v.pause();
+                        v.remove();
+                    }
+                });
+
+                // ── MutationObserver: catch dynamically injected ad videos ───
+                // Some pages inject the ad-video element after the initial DOM is built.
+                // The observer watches for new nodes and removes them before they play.
+                if (!window.__adObserverActive) {
+                    window.__adObserverActive = true;
+                    var observer = new MutationObserver(function(mutations) {
+                        mutations.forEach(function(mutation) {
+                            mutation.addedNodes.forEach(function(node) {
+                                if (!node.querySelectorAll) return;
+
+                                // Check the node itself
+                                if (node.nodeName === 'VIDEO') {
+                                    var src = (node.src || node.getAttribute('src') || '').toLowerCase();
+                                    var isAd = adVideoPatterns.some(function(p) { return src.indexOf(p) !== -1; });
+                                    if (isAd || node.id === 'ad-video') {
+                                        node.pause();
+                                        node.remove();
+                                        return;
+                                    }
+                                }
+
+                                // Check descendants
+                                node.querySelectorAll('video, #ad-video, [id*="ad-video"]').forEach(function(v) {
+                                    var src = (v.src || v.getAttribute('src') || '').toLowerCase();
+                                    var isAd = adVideoPatterns.some(function(p) { return src.indexOf(p) !== -1; });
+                                    if (isAd || v.id === 'ad-video') {
+                                        v.pause();
+                                        v.remove();
+                                    }
+                                });
+                            });
+                        });
+                    });
+                    observer.observe(document.documentElement, { childList: true, subtree: true });
+                }
             })();
             """.trimIndent(), null
         )
     }
+
+    // ── Error handling ────────────────────────────────────────────────────────
 
     override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
         if (request?.isForMainFrame == true) {
@@ -523,3 +629,4 @@ private class AdBlockerWebViewClient(
         }
     }
 }
+

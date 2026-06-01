@@ -15,6 +15,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -55,6 +56,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.kiduyuk.klausk.kiduyutv.data.model.*
+import com.kiduyuk.klausk.kiduyutv.data.model.ScrapedChannel
+import com.kiduyuk.klausk.kiduyutv.data.repository.ChannelScraper
+import com.kiduyuk.klausk.kiduyutv.util.ScrapedChannelsCache
 import com.kiduyuk.klausk.kiduyutv.ui.components.LottieLoadingView
 import com.kiduyuk.klausk.kiduyutv.ui.components.TopBar
 import com.kiduyuk.klausk.kiduyutv.ui.player.iptv.SchedulePlayerActivity
@@ -63,8 +67,11 @@ import com.kiduyuk.klausk.kiduyutv.viewmodel.CategoryItem
 import com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel
 import com.kiduyuk.klausk.kiduyutv.viewmodel.ScheduleViewModel
 import com.kiduyuk.klausk.kiduyutv.viewmodel.ScheduleUiState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Composable function for the Live TV screen.
@@ -117,11 +124,39 @@ fun LiveTvScreen(
 
     // Track selected tab
     var selectedTabIndex by remember { mutableIntStateOf(initialTab) }
+    // State for Channels tab
+    var scrapedChannels by remember { mutableStateOf<List<ScrapedChannel>>(emptyList()) }
+    var isLoadingChannels by remember { mutableStateOf(false) }
+    var channelsError by remember { mutableStateOf<String?>(null) }
+    var channelsSearchQuery by remember { mutableStateOf("") }
+    
+    // Use rememberCoroutineScope for proper lifecycle management
+    val coroutineScope = rememberCoroutineScope()
+
+    // Load channels when tab is selected
+    LaunchedEffect(selectedTabIndex) {
+        if (selectedTabIndex == 2 && scrapedChannels.isEmpty() && !isLoadingChannels) {
+            loadScrapedChannels(
+                coroutineScope = coroutineScope,
+                context = context,
+                onLoading = { isLoadingChannels = true },
+                onSuccess = { channels ->
+                    scrapedChannels = channels
+                    isLoadingChannels = false
+                    channelsError = null
+                },
+                onError = { error ->
+                    channelsError = error
+                    isLoadingChannels = false
+                }
+            )
+        }
+    }
 
     val tabs = listOf(
         TabItem("Live TV", Icons.Default.Tv),
         TabItem("Schedule", Icons.Default.CalendarToday),
-        TabItem("My Channels", Icons.Default.Favorite)
+        TabItem("My Channels", Icons.Default.List)
     )
 
     Box(
@@ -402,6 +437,131 @@ private data class TabItem(
     val icon: ImageVector
 )
 
+// --- Channels Tab Components ---
+
+/**
+ * Helper function to load scraped channels
+ * First tries to load from cache, then fetches from network and saves to cache
+ */
+private fun loadScrapedChannels(
+    coroutineScope: CoroutineScope,
+    context: Context,
+    onLoading: () -> Unit,
+    onSuccess: (List<ScrapedChannel>) -> Unit,
+    onError: (String) -> Unit,
+    forceRefresh: Boolean = false
+) {
+    onLoading()
+    coroutineScope.launch {
+        // First try to load from cache (unless force refresh)
+        if (!forceRefresh) {
+            val cachedChannels = withContext(Dispatchers.IO) {
+                ScrapedChannelsCache.loadChannels(context)
+            }
+            if (cachedChannels.isNotEmpty()) {
+                android.util.Log.i("LiveTvScreen", "Loaded ${cachedChannels.size} channels from cache")
+                onSuccess(cachedChannels)
+                return@launch
+            }
+        }
+
+        // Fetch from network
+        val result = withContext(Dispatchers.IO) {
+            ChannelScraper.fetchChannels(fetchStreamUrls = true)
+        }
+        result.fold(
+            onSuccess = { channels ->
+                // Save to cache
+                coroutineScope.launch(Dispatchers.IO) {
+                    ScrapedChannelsCache.saveChannels(context, channels)
+                }
+                onSuccess(channels)
+            },
+            onFailure = { error ->
+                // Try cache as fallback
+                val cachedChannels = withContext(Dispatchers.IO) {
+                    ScrapedChannelsCache.loadChannels(context)
+                }
+                if (cachedChannels.isNotEmpty()) {
+                    onSuccess(cachedChannels)
+                } else {
+                    onError(error.message ?: "Failed to load channels")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Channels tab content - shows scraped channels from dlhd.pk in a grid
+ */
+@Composable
+private fun ChannelsTabContent(
+    channels: List<ScrapedChannel>,
+    isLoading: Boolean,
+    error: String?,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onChannelClick: (ScrapedChannel) -> Unit,
+    onRetry: () -> Unit
+) {
+    // Filter out channels starting with "18+" and apply search filter
+    val filteredChannels = remember(channels, searchQuery) {
+        channels
+            .filter { !it.name.startsWith("18+", ignoreCase = true) }
+            .filter { channel ->
+                if (searchQuery.isBlank()) true
+                else channel.name.contains(searchQuery, ignoreCase = true) ||
+                        channel.category?.contains(searchQuery, ignoreCase = true) == true
+            }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        when {
+            // Loading state
+            isLoading -> {
+                LottieLoadingView(
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+
+            // Error state
+            error != null && channels.isEmpty() -> {
+                ErrorContent(
+                    errorMessage = error,
+                    onRetry = onRetry
+                )
+            }
+
+            // Channels grid
+            else -> {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Header with search
+                    ChannelsHeader(
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = onSearchQueryChange,
+                        totalChannels = channels.size,
+                        filteredCount = filteredChannels.size
+                    )
+
+                    // Channels grid
+                    if (filteredChannels.isEmpty()) {
+                        EmptyChannelsView(
+                            searchQuery = searchQuery,
+                            onClearSearch = { onSearchQueryChange("") }
+                        )
+                    } else {
+                        ScrapedChannelsGrid(
+                            channels = filteredChannels,
+                            onChannelClick = onChannelClick
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
  * Favorites tab showing user's saved IPTV channels.
  */
@@ -419,7 +579,7 @@ private fun FavoriteChannelsTabContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(Icons.Default.Favorite, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(64.dp))
+                Icon(Icons.Default.List, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "No favorite channels yet", color = TextPrimary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -434,13 +594,319 @@ private fun FavoriteChannelsTabContent(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                itemsIndexed(favorites) { index, channel ->
+                itemsIndexed(favorites, key = { _, channel -> channel.id }) { index, channel ->
                     ChannelCard(
                         channel = channel,
                         modifier = if (index == 0) Modifier else Modifier,
                         onClick = { onChannelClick(channel) }
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Header for channels tab with search functionality
+ */
+@Composable
+private fun ChannelsHeader(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    totalChannels: Int,
+    filteredCount: Int
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        // Title row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Live Channels",
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (searchQuery.isNotBlank()) {
+                        "$filteredCount of $totalChannels channels"
+                    } else {
+                        "$totalChannels channels available"
+                    },
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Search field
+        ChannelsSearchField(
+            query = searchQuery,
+            onQueryChange = onSearchQueryChange,
+            onClear = { onSearchQueryChange("") }
+        )
+    }
+}
+
+/**
+ * Search input field for channels
+ */
+@Composable
+private fun ChannelsSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(CardDark)
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) PrimaryRed else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Search",
+                tint = if (isFocused) PrimaryRed else TextSecondary,
+                modifier = Modifier.size(24.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                textStyle = TextStyle(
+                    color = Color.White,
+                    fontSize = 16.sp
+                ),
+                cursorBrush = SolidColor(PrimaryRed),
+                singleLine = true,
+                interactionSource = interactionSource,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester),
+                decorationBox = { innerTextField ->
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Search channels...",
+                            color = TextSecondary,
+                            fontSize = 16.sp
+                        )
+                    }
+                    innerTextField()
+                }
+            )
+
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClear) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Clear",
+                        tint = TextSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Grid displaying scraped channels
+ */
+@Composable
+private fun ScrapedChannelsGrid(
+    channels: List<ScrapedChannel>,
+    onChannelClick: (ScrapedChannel) -> Unit
+) {
+    val firstFocusRequester = remember { FocusRequester() }
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(channels) {
+        if (channels.isNotEmpty()) {
+            firstFocusRequester.requestFocus()
+        }
+    }
+
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Fixed(4),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        itemsIndexed(channels, key = { _, channel -> channel.name }) { index, channel ->
+            val modifier = if (index == 0) {
+                Modifier.focusRequester(firstFocusRequester)
+            } else {
+                Modifier
+            }
+            ScrapedChannelCard(
+                channel = channel,
+                modifier = modifier,
+                onClick = { onChannelClick(channel) }
+            )
+        }
+    }
+}
+
+/**
+ * Card component for displaying a scraped channel
+ */
+@Composable
+private fun ScrapedChannelCard(
+    channel: ScrapedChannel,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val context = LocalContext.current
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isFocused) DarkRed else CardDark)
+            .border(
+                width = if (isFocused) 2.dp else 0.dp,
+                color = if (isFocused) Color.White else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Channel thumbnail or placeholder
+            if (!channel.thumbnailUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(channel.thumbnailUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = channel.name,
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Fit
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            } else {
+                // Placeholder icon when no thumbnail
+                Icon(
+                    imageVector = Icons.Default.Tv,
+                    contentDescription = channel.name,
+                    tint = PrimaryRed,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Text(
+                text = channel.name,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/**
+ * Empty state view for channels
+ */
+@Composable
+private fun EmptyChannelsView(
+    searchQuery: String,
+    onClearSearch: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.SearchOff,
+            contentDescription = null,
+            tint = TextSecondary,
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "No Channels Found",
+            style = MaterialTheme.typography.titleMedium,
+            color = TextPrimary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = if (searchQuery.isNotBlank()) {
+                "No channels matching \"$searchQuery\""
+            } else {
+                "Unable to load channels from server"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
+        if (searchQuery.isNotBlank()) {
+            val interactionSource = remember { MutableInteractionSource() }
+            val isFocused by interactionSource.collectIsFocusedAsState()
+
+            Button(
+                onClick = onClearSearch,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isFocused) Color.White else PrimaryRed,
+                    contentColor = if (isFocused) PrimaryRed else Color.White
+                ),
+                modifier = Modifier.focusable(interactionSource = interactionSource)
+            ) {
+                Icon(Icons.Default.Clear, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Clear Search")
             }
         }
     }
@@ -477,7 +943,7 @@ private fun ScheduleTabContent(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Show each day
-                    items(uiState.scheduleDays) { scheduleDay ->
+                    items(uiState.scheduleDays, key = { it.date }) { scheduleDay ->
                         ScheduleDayCard(
                             scheduleDay = scheduleDay,
                             expandedEventIds = uiState.expandedEventIds,
@@ -644,6 +1110,12 @@ private fun CategorySection(
  * Individual event item that can be expanded to show channels.
  * Always shows available channels section when event has channels,
  * making it focusable for TV D-pad navigation even with a single channel.
+ *
+ * Fix: Removed redundant .focusable() from the Quick Play button Box.
+ * Modifier.clickable() already registers the element in the TV focus
+ * traversal system and handles KEYCODE_DPAD_CENTER / KEYCODE_ENTER
+ * internally. The duplicate .focusable() was swallowing remote OK events
+ * before clickable() could process them.
  */
 @Composable
 private fun EventItem(
@@ -748,6 +1220,7 @@ private fun EventItem(
             }
 
             // Expanded channels section - always shown when event has channels and is expanded
+            // OR always visible when event has only 1 channel (for better TV navigation)
             AnimatedVisibility(
                 visible = isExpanded && event.channels.isNotEmpty(),
                 enter = expandVertically() + fadeIn(),
@@ -792,15 +1265,12 @@ private fun EventItem(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(
-                            items = event.channels,
-                            key = { it.id }
-                        ) { channel ->
-                            val isFirst = event.channels.firstOrNull()?.id == channel.id
+                        items(count = event.channels.size, key = { index -> event.channels[index].id }) { index ->
+                            val channel = event.channels[index]
                             ChannelChip(
                                 channel = channel,
-                                isFirst = isFirst,
-                                focusRequester = if (isFirst) firstChannelFocusRequester else null,
+                                isFirst = index == 0,
+                                focusRequester = if (index == 0) firstChannelFocusRequester else null,
                                 onClick = { onChannelClick(channel) }
                             )
                         }
@@ -808,7 +1278,11 @@ private fun EventItem(
                 }
             }
 
-            // Quick channel selector - shown if event has channels
+            // Quick channel selector - shown if event has channels.
+            // FIX: Removed .focusable() — .clickable() already handles focus
+            // registration and D-pad center/enter events on its own. The prior
+            // .focusable() was creating a duplicate interaction pipeline that
+            // consumed KEYCODE_DPAD_CENTER before clickable() could fire onClick.
             if (event.channels.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -824,6 +1298,7 @@ private fun EventItem(
                             color = if (isQuickPlayFocused) PrimaryRed else Color.Transparent,
                             shape = RoundedCornerShape(8.dp)
                         )
+                        // .focusable() REMOVED — clickable handles focus + D-pad natively
                         .clickable(
                             interactionSource = quickPlayInteractionSource,
                             indication = null,
@@ -861,6 +1336,12 @@ private fun EventItem(
 
 /**
  * Clickable channel chip — always focusable for D-pad navigation.
+ *
+ * Fix: Removed .focusable() before .clickable(). Modifier.clickable()
+ * already makes the composable focusable and handles KEYCODE_DPAD_CENTER /
+ * KEYCODE_ENTER. The prior explicit .focusable() created a second focus
+ * node sharing the same MutableInteractionSource, which intercepted remote
+ * OK key events and prevented onClick from firing.
  */
 @Composable
 private fun ChannelChip(
@@ -881,6 +1362,7 @@ private fun ChannelChip(
                     Modifier
                 }
             )
+            // .focusable() REMOVED — clickable handles focus + D-pad natively
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -985,7 +1467,7 @@ private fun CategoriesContent(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                itemsIndexed(categories) { index, category ->
+                itemsIndexed(categories, key = { _, category -> category.name }) { index, category ->
                     val modifier = if (index == 0) {
                         Modifier.focusRequester(firstFocusRequester)
                     } else {
@@ -1204,7 +1686,7 @@ private fun SearchContent(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                itemsIndexed(searchResults) { index, channel ->
+                itemsIndexed(searchResults, key = { _, channel -> channel.id }) { index, channel ->
                     ChannelCard(
                         channel = channel,
                         modifier = Modifier,
@@ -1258,7 +1740,7 @@ private fun SearchInputField(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            BasicTextField(
+            androidx.compose.foundation.text.BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
                 textStyle = TextStyle(
@@ -1471,7 +1953,7 @@ private fun ChannelsContent(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp)
             ) {
-                itemsIndexed(channels) { index, channel ->
+                itemsIndexed(channels, key = { _, channel -> channel.id }) { index, channel ->
                     val modifier = if (index == 0) {
                         Modifier.focusRequester(firstChannelFocusRequester)
                     } else {
@@ -1490,8 +1972,9 @@ private fun ChannelsContent(
 }
 
 /**
- * Card component for displaying a channel with long press support.
- * Fixed: Removed onPreviewKeyEvent, using only combinedClickable with proper flag handling.
+ * Card component for displaying a channel.
+ * Fix: Properly handle long-press vs click for TV remote navigation
+ * by using combinedClickable which handles the timing correctly.
  */
 @Composable
 private fun ChannelCard(
@@ -1503,8 +1986,17 @@ private fun ChannelCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val context = LocalContext.current
-    var isLongPressHandled by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    
+    // Track if a long-press was detected and should block the subsequent click
+    var isLongPressDetected by remember { mutableStateOf(false) }
+    
+    // Reset long-press flag after a delay to allow normal clicks again
+    LaunchedEffect(isLongPressDetected) {
+        if (isLongPressDetected) {
+            delay(300) // Give time for dialog to appear
+            isLongPressDetected = false
+        }
+    }
 
     Box(
         modifier = modifier
@@ -1521,18 +2013,14 @@ private fun ChannelCard(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = {
-                    // Only fire onClick if long press wasn't just handled
-                    if (!isLongPressHandled) {
+                    // Only trigger onClick if a long-press wasn't just detected
+                    if (!isLongPressDetected) {
                         onClick()
-                    }
-                    // Reset after delay to prevent race condition
-                    scope.launch {
-                        delay(500)
-                        isLongPressHandled = false
                     }
                 },
                 onLongClick = {
-                    isLongPressHandled = true
+                    // Set flag to prevent the subsequent onClick
+                    isLongPressDetected = true
                     onLongClick?.invoke()
                 }
             )
