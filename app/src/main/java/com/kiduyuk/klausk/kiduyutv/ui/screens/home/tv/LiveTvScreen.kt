@@ -792,12 +792,15 @@ private fun EventItem(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(count = event.channels.size) { index ->
-                            val channel = event.channels[index]
+                        items(
+                            items = event.channels,
+                            key = { it.id }
+                        ) { channel ->
+                            val isFirst = event.channels.firstOrNull()?.id == channel.id
                             ChannelChip(
                                 channel = channel,
-                                isFirst = index == 0,
-                                focusRequester = if (index == 0) firstChannelFocusRequester else null,
+                                isFirst = isFirst,
+                                focusRequester = if (isFirst) firstChannelFocusRequester else null,
                                 onClick = { onChannelClick(channel) }
                             )
                         }
