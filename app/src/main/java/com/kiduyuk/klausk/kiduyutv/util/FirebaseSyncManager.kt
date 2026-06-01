@@ -246,7 +246,8 @@ object FirebaseSyncManager {
                 val companiesCount = getFirebaseCompaniesCount()
                 val networksCount = getFirebaseNetworksCount()
                 val castsCount = getFirebaseCastsCount()
-                val totalItems = myListCount + companiesCount + networksCount + castsCount
+                val favoriteChannelsCount = getFirebaseFavoriteChannelsCount()
+                val totalItems = myListCount + companiesCount + networksCount + castsCount + favoriteChannelsCount
                 
                 _syncProgress.value = TOTAL_SYNC_STEPS
                 _syncMessage.value = "Sync complete!"
@@ -596,7 +597,7 @@ object FirebaseSyncManager {
 
             // ── STEP 2: Get local favorites ──
             val prefs = context.getSharedPreferences("live_tv_prefs", Context.MODE_PRIVATE)
-            val localFavoritesJson = prefs.getString("favorites", "[]")
+            val localFavoritesJson = prefs.getString("favorite_channels", "[]")
             val localFavorites = mutableListOf<IptvChannel>()
 
             try {
@@ -772,6 +773,18 @@ object FirebaseSyncManager {
     private suspend fun getFirebaseCastsCount(): Int {
         return try {
             val data = FirebaseManager.getSavedCastsOnce()
+            data?.size ?: 0
+        } catch (e: Exception) {
+            0
+        }
+    }
+
+    /**
+     * Get the count of Favorite Channels from Firebase.
+     */
+    private suspend fun getFirebaseFavoriteChannelsCount(): Int {
+        return try {
+            val data = FirebaseManager.getSavedChannelsOnce()
             data?.size ?: 0
         } catch (e: Exception) {
             0
