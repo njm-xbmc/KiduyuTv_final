@@ -54,7 +54,13 @@ data class ScheduleCategory(
 data class ScheduleDay(
     val dateTitle: String,
     val categories: List<ScheduleCategory>
-)
+) {
+    /**
+     * Unique identifier for use as key in LazyColumn/LazyGrid.
+     * Uses a hash of the dateTitle to ensure uniqueness.
+     */
+    val date: String get() = "schedule_day_${dateTitle.hashCode()}"
+}
 
 /**
  * Represents player options for a channel

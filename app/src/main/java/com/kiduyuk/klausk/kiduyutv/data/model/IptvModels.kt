@@ -30,7 +30,13 @@ data class IptvChannel(
     val group: String? = null,
     val tvgId: String? = null,
     val tvgName: String? = null
-)
+) {
+    /**
+     * Unique identifier for use as key in LazyColumn/LazyGrid.
+     * Uses tvgId if available, otherwise generates a hash from name+url.
+     */
+    val id: String get() = tvgId ?: "${name}_${url}".hashCode().toString()
+}
 
 /**
  * Represents the parsed IPTV playlist data.
