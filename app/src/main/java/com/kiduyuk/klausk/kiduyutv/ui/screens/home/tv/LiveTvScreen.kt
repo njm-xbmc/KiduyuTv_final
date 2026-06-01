@@ -181,7 +181,8 @@ fun LiveTvScreen(
                 0 -> { // Live TV Tab
                     LiveTvTabContent(
                         uiState = uiState,
-                        viewModel = viewModel
+                        viewModel = viewModel,
+                        onChannelLongPress = { channel -> favoriteChannelToConfirm = channel }
                     )
                 }
                 1 -> { // Schedule Tab
@@ -354,7 +355,8 @@ private fun LiveTvTopBar(
 @Composable
 private fun LiveTvTabContent(
     uiState: com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvUiState,
-    viewModel: LiveTvViewModel
+    viewModel: LiveTvViewModel,
+    onChannelLongPress: (IptvChannel) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         when {
@@ -411,7 +413,7 @@ private fun LiveTvTabContent(
                         viewModel.selectChannel(channel)
                     },
                     onBackClick = { viewModel.clearCategorySelection() },
-                    onChannelLongPress = { channel -> favoriteChannelToConfirm = channel }
+                    onChannelLongPress = onChannelLongPress
                 )
             }
         }
