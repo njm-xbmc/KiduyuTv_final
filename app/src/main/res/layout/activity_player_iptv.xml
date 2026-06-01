@@ -266,9 +266,25 @@
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:nextFocusLeft="@id/btnCC"
-                        android:nextFocusRight="@id/btnVolume"
+                        android:nextFocusRight="@id/btnFavorite"
                         android:nextFocusUp="@id/btnLock"
                         android:src="@drawable/ic_settings"
+                        app:tint="#FFFFFF" />
+                    
+                    <!-- Favorite (save channel) -->
+                    <ImageButton
+                        android:id="@+id/btnFavorite"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/selector_button_tv"
+                        android:contentDescription="Favorite"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@id/btnSettings"
+                        android:nextFocusRight="@id/btnVolume"
+                        android:nextFocusUp="@id/btnLock"
+                        android:src="@android:drawable/star_big_off"
                         app:tint="#FFFFFF" />
 
                     <!-- Volume -->

@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalFoundationApi::class)
 package com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv
 
 import android.content.Context
@@ -1920,6 +1921,7 @@ private fun ChannelsContent(
  * Card component for displaying a channel.
  */
 @Composable
+
 private fun ChannelCard(
     channel: IptvChannel,
     modifier: Modifier = Modifier,

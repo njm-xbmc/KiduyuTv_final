@@ -154,6 +154,7 @@ class IptvPlayerActivity : AppCompatActivity() {
     private lateinit var btnFill: TextView
     private lateinit var btnCC: ImageButton
     private lateinit var tvSubtitleTracks: TextView
+    private lateinit var btnFavorite: ImageButton
     private lateinit var btnSettings: ImageButton
     private lateinit var btnVolume: ImageButton
     private lateinit var btnCast: ImageButton
@@ -495,6 +496,7 @@ class IptvPlayerActivity : AppCompatActivity() {
         btnFill         = findViewById(R.id.btnFill)
         btnCC           = findViewById(R.id.btnCC)
         tvSubtitleTracks = findViewById(R.id.tvSubtitleTracks)
+        btnFavorite      = findViewById(R.id.btnFavorite)
         btnSettings     = findViewById(R.id.btnSettings)
         btnVolume       = findViewById(R.id.btnVolume)
         btnCast         = findViewById(R.id.btnCast)
@@ -736,6 +738,39 @@ class IptvPlayerActivity : AppCompatActivity() {
         // ── CC → open Subtitles tab directly ────────────────────────────────
         btnCC.setOnClickListener {
             showTrackDialog(startTab = 2)   // 0=Video 1=Audio 2=Subtitles
+            scheduleHideOverlay()
+        }
+
+        // ── Favorite / Save channel ─────────────────────────────────────────
+        btnFavorite.setOnClickListener {
+            // Build a channel object from current intent data
+            val channel = IptvChannel(
+                name = channelName,
+                logo = channelLogo,
+                url = streamUrl,
+                group = channelGroup,
+                tvgId = tvgId,
+                tvgName = tvgName
+            )
+
+            // Use LiveTvViewModel to manage favorites
+            try {
+                val vm = androidx.lifecycle.ViewModelProvider(this).get(com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel::class.java)
+                if (vm.isFavorite(channel)) {
+                    // show already added
+                    Toast.makeText(this, "Channel already in favorites", Toast.LENGTH_SHORT).show()
+                    // Fill the icon to indicate saved
+                    btnFavorite.setImageResource(android.R.drawable.star_big_on)
+                } else {
+                    vm.addFavorite(channel)
+                    Toast.makeText(this, "Added to favorites", Toast.LENGTH_SHORT).show()
+                    btnFavorite.setImageResource(android.R.drawable.star_big_on)
+                }
+            } catch (e: Exception) {
+                // Fallback: show error
+                Toast.makeText(this, "Failed to add favorite", Toast.LENGTH_SHORT).show()
+            }
+
             scheduleHideOverlay()
         }
 
