@@ -21,6 +21,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -69,6 +70,7 @@ import com.kiduyuk.klausk.kiduyutv.data.repository.IptvRepository
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
 import kotlinx.coroutines.CoroutineScope
 import android.content.pm.PackageManager
+import com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -182,6 +184,8 @@ class IptvPlayerActivity : AppCompatActivity() {
     // D-pad navigation tracking for keeping controls visible
     private var isDpadNavigating = false
 
+    private val liveTvViewModel: LiveTvViewModel by viewModels()
+
     // Compose dialog overlay (track selector or any other sheet)
     private var composeDialogView: ComposeView? = null
 
@@ -236,6 +240,8 @@ class IptvPlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_player_iptv)
 
         bindViews()
+        liveTvViewModel.initialize(applicationContext)
+        updateFavoriteButtonState()
         populateTopBar()
         wireOverlayToggle()
         wireOverlayButtons()
@@ -679,6 +685,40 @@ class IptvPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateFavoriteButtonState() {
+        val channel = IptvChannel(
+            name = channelName,
+            logo = channelLogo,
+            url = streamUrl,
+            group = channelGroup,
+            tvgId = tvgId,
+            tvgName = tvgName
+        )
+        val isSaved = liveTvViewModel.isFavorite(channel)
+        btnFavorite.setImageResource(
+            if (isSaved) android.R.drawable.star_big_on else android.R.drawable.star_big_off
+        )
+    }
+
+    private fun confirmAddFavorite(channel: IptvChannel) {
+        if (liveTvViewModel.isFavorite(channel)) {
+            btnFavorite.setImageResource(android.R.drawable.star_big_on)
+            Toast.makeText(this, "Channel already in favorites", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Add to favorites")
+            .setMessage("Add $channelName to your favorites?")
+            .setPositiveButton("Add") { _, _ ->
+                liveTvViewModel.addFavorite(channel)
+                btnFavorite.setImageResource(android.R.drawable.star_big_on)
+                Toast.makeText(this, "Added to favorites", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     // ── Overlay buttons ──────────────────────────────────────────────────────
 
     private fun wireOverlayButtons() {
@@ -743,7 +783,6 @@ class IptvPlayerActivity : AppCompatActivity() {
 
         // ── Favorite / Save channel ─────────────────────────────────────────
         btnFavorite.setOnClickListener {
-            // Build a channel object from current intent data
             val channel = IptvChannel(
                 name = channelName,
                 logo = channelLogo,
@@ -752,26 +791,7 @@ class IptvPlayerActivity : AppCompatActivity() {
                 tvgId = tvgId,
                 tvgName = tvgName
             )
-
-            // Use LiveTvViewModel to manage favorites
-            try {
-                val vm = androidx.lifecycle.ViewModelProvider(this).get(com.kiduyuk.klausk.kiduyutv.viewmodel.LiveTvViewModel::class.java)
-                if (vm.isFavorite(channel)) {
-                    // show already added
-                    Toast.makeText(this, "Channel already in favorites", Toast.LENGTH_SHORT).show()
-                    // Fill the icon to indicate saved
-                    btnFavorite.setImageResource(android.R.drawable.star_big_on)
-                } else {
-                    vm.addFavorite(channel)
-                    Toast.makeText(this, "Added to favorites", Toast.LENGTH_SHORT).show()
-                    btnFavorite.setImageResource(android.R.drawable.star_big_on)
-                }
-            } catch (e: Exception) {
-                // Fallback: show error
-                Toast.makeText(this, "Failed to add favorite", Toast.LENGTH_SHORT).show()
-            }
-
-            scheduleHideOverlay()
+            confirmAddFavorite(channel)
         }
 
         // ── Settings → open full track dialog ───────────────────────────────
@@ -779,6 +799,9 @@ class IptvPlayerActivity : AppCompatActivity() {
             showTrackDialog(startTab = 0)
             scheduleHideOverlay()
         }
+
+        // Make sure favorites button reflects current save state
+        updateFavoriteButtonState()
 
         // ── Volume / Mute ────────────────────────────────────────────────────
         btnVolume.setOnClickListener {

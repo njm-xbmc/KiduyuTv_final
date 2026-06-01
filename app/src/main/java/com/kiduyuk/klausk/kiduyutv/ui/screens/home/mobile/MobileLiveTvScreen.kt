@@ -91,8 +91,7 @@ fun MobileLiveTvScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
                     items(uiState.channels) { channel ->
                         ChannelRow(channel) { selected ->
-                            onNavigate("") // keep nav callback available
-                            // Launch player activity
+                            // Launch player activity directly; this screen does not use Compose navigation for playback.
                             val intent = IptvPlayerActivity.createIntent(
                                 context,
                                 selected.name,

@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import android.widget.Toast
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -99,6 +100,7 @@ fun LiveTvScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scheduleUiState by scheduleViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    var favoriteChannelToConfirm by remember { mutableStateOf<IptvChannel?>(null) }
 
     // Initialize ViewModels with context
     LaunchedEffect(Unit) {
@@ -218,6 +220,33 @@ fun LiveTvScreen(
                     )
                 }
             }
+        }
+
+        if (favoriteChannelToConfirm != null) {
+            val channelToConfirm = favoriteChannelToConfirm!!
+            AlertDialog(
+                onDismissRequest = { favoriteChannelToConfirm = null },
+                title = { Text(text = "Add to favorites?") },
+                text = { Text(text = "Add ${channelToConfirm.name} to your favorites?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (viewModel.isFavorite(channelToConfirm)) {
+                            Toast.makeText(context, "Already in favorites", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.addFavorite(channelToConfirm)
+                            Toast.makeText(context, "Added to favorites", Toast.LENGTH_SHORT).show()
+                        }
+                        favoriteChannelToConfirm = null
+                    }) {
+                        Text("Add")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { favoriteChannelToConfirm = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         // Schedule error snackbar
@@ -382,7 +411,7 @@ private fun LiveTvTabContent(
                         viewModel.selectChannel(channel)
                     },
                     onBackClick = { viewModel.clearCategorySelection() },
-                    onChannelLongPress = { channel -> viewModel.addFavorite(channel) }
+                    onChannelLongPress = { channel -> favoriteChannelToConfirm = channel }
                 )
             }
         }
@@ -1956,6 +1985,18 @@ private fun ChannelCard(
                 color = if (isFocused) Color.White else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
+            .onPreviewKeyEvent { keyEvent ->
+                if (onLongClick != null &&
+                    keyEvent.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN &&
+                    keyEvent.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER &&
+                    keyEvent.nativeKeyEvent.isLongPress
+                ) {
+                    onLongClick()
+                    true
+                } else {
+                    false
+                }
+            }
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
