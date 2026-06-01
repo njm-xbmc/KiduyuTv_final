@@ -1,6 +1,7 @@
 package com.kiduyuk.klausk.kiduyutv.util
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.io.encoding.ExperimentalEncodingApi
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -557,44 +559,19 @@ object FirebaseSyncManager {
      * they get uploaded so other devices can see them.
      * Merges cloud favorites with local favorites, giving priority to cloud data.
      */
+
     private suspend fun syncFavoriteChannels(forceRefresh: Boolean) {
         try {
             val context = applicationContext ?: return
-            
+
             // ── STEP 1: Download from Firebase ──
             val firebaseChannels = FirebaseManager.getSavedChannelsOnce()
             val cloudFavorites = mutableListOf<IptvChannel>()
-            val firebaseChannels = FirebaseManager.getSavedChannelsOnce()
-            
+
             if (firebaseChannels != null && firebaseChannels.isNotEmpty()) {
                 Log.i(TAG, "Found ${firebaseChannels.size} favorite channels in Firebase")
-                
-                // Get current local favorites
-                val prefs = context.getSharedPreferences("live_tv_prefs", Context.MODE_PRIVATE)
-                val localFavoritesJson = prefs.getString("favorites", "[]")
-                val localFavorites = mutableListOf<IptvChannel>()
-                
-                try {
-                    val jsonArray = JSONArray(localFavoritesJson)
-                    for (i in 0 until jsonArray.length()) {
-                        val jsonObj = jsonArray.getJSONObject(i)
-                        val channel = IptvChannel(
-                            name = jsonObj.optString("name", ""),
-                            url = jsonObj.optString("url", ""),
-                            logo = jsonObj.optString("logo", ""),
-                            tvgId = jsonObj.optString("tvgId", ""),
-                            tvgName = jsonObj.optString("tvgName", ""),
-                            group = jsonObj.optString("group", "")
-                        )
-                        localFavorites.add(channel)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing local favorites", e)
-                }
-                
-                // Convert Firebase channels to IptvChannel objects
-                val cloudFavorites = mutableListOf<IptvChannel>()
 
+                // Convert Firebase channels to IptvChannel objects
                 firebaseChannels.forEach { (key, value) ->
                     try {
                         if (value is Map<*, *>) {
@@ -616,12 +593,12 @@ object FirebaseSyncManager {
             } else {
                 Log.i(TAG, "No favorite channels found in Firebase")
             }
-            
+
             // ── STEP 2: Get local favorites ──
             val prefs = context.getSharedPreferences("live_tv_prefs", Context.MODE_PRIVATE)
             val localFavoritesJson = prefs.getString("favorites", "[]")
             val localFavorites = mutableListOf<IptvChannel>()
-            
+
             try {
                 val jsonArray = JSONArray(localFavoritesJson)
                 for (i in 0 until jsonArray.length()) {
@@ -639,14 +616,14 @@ object FirebaseSyncManager {
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing local favorites", e)
             }
-            
+
             Log.i(TAG, "Local favorites count: ${localFavorites.size}")
-            
+
             // ── STEP 3: TWO-WAY MERGE ──
-            // We need to merge both lists, eliminating duplicates by URL
+            // Merge both lists, eliminating duplicates by URL
             val mergedFavorites = mutableListOf<IptvChannel>()
             val seenUrls = mutableSetOf<String>() // Track URLs to prevent duplicates
-            
+
             // First add all cloud favorites
             cloudFavorites.forEach { fav ->
                 if (!seenUrls.contains(fav.url)) {
@@ -654,7 +631,7 @@ object FirebaseSyncManager {
                     seenUrls.add(fav.url)
                 }
             }
-            
+
             // Then add local-only favorites (not in cloud)
             localFavorites.forEach { localFav ->
                 if (!seenUrls.contains(localFav.url)) {
@@ -663,9 +640,9 @@ object FirebaseSyncManager {
                     Log.i(TAG, "Adding local-only favorite to merged list: ${localFav.name}")
                 }
             }
-            
+
             Log.i(TAG, "Merged favorites count: ${mergedFavorites.size}")
-            
+
             // ── STEP 4: Save merged to local SharedPreferences ──
             val mergedJsonArray = JSONArray()
             mergedFavorites.forEach { channel ->
@@ -679,57 +656,18 @@ object FirebaseSyncManager {
                 }
                 mergedJsonArray.put(jsonObj)
             }
-            
+
             prefs.edit().putString("favorites", mergedJsonArray.toString()).apply()
             Log.i(TAG, "Saved ${mergedFavorites.size} merged favorites to local storage")
-            
+
             // ── STEP 5: Upload merged list BACK to Firebase (TWO-WAY SYNC) ──
             uploadMergedFavoritesToFirebase(mergedFavorites)
-            
 
-                            cloudFavorites.add(channel)
-                            Log.i(TAG, "Synced favorite channel: ${channel.name}")
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error converting favorite channel: $key", e)
-                    }
-                }
-                
-                // Merge: Cloud favorites + local favorites not in cloud
-                val mergedFavorites = mutableListOf<IptvChannel>()
-                mergedFavorites.addAll(cloudFavorites) // Add all cloud favorites first
-                
-                // Add local-only favorites (not already in cloud)
-                localFavorites.forEach { localFav ->
-                    if (!cloudFavorites.any { it.url == localFav.url }) {
-                        mergedFavorites.add(localFav)
-                    }
-                }
-                
-                // Save merged favorites to local SharedPreferences
-                val mergedJsonArray = JSONArray()
-                mergedFavorites.forEach { channel ->
-                    val jsonObj = JSONObject().apply {
-                        put("name", channel.name)
-                        put("url", channel.url)
-                        put("logo", channel.logo)
-                        put("tvgId", channel.tvgId)
-                        put("tvgName", channel.tvgName)
-                        put("group", channel.group)
-                    }
-                    mergedJsonArray.put(jsonObj)
-                }
-                
-                prefs.edit().putString("favorites", mergedJsonArray.toString()).apply()
-                Log.i(TAG, "Synced ${mergedFavorites.size} favorite channels to local storage")
-                
-            } else {
-                Log.i(TAG, "No favorite channels found in Firebase")
-            }
         } catch (e: Exception) {
             Log.e(TAG, "Error syncing Favorite Channels", e)
         }
     }
+
     
     /**
      * Upload the merged favorites list to Firebase.
@@ -737,6 +675,7 @@ object FirebaseSyncManager {
      * 1. Local favorites not in Firebase get uploaded
      * 2. Remote devices will receive the complete list on their next sync
      */
+    @OptIn(ExperimentalEncodingApi::class)
     private suspend fun uploadMergedFavoritesToFirebase(favorites: List<IptvChannel>) {
         try {
             // Clear current savedChannels node first
