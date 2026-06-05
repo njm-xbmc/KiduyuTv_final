@@ -199,6 +199,12 @@ class PlayerActivity : AppCompatActivity() {
                     Log.i(TAG, "[WebView] Page finished loading with AdBlocker")
                     // Inject progress tracking script after page loads
                     injectProgressTrackingScript()
+                    // Force AWV to re-composite its surface after page settles
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        fixAWVSurfaceViewZOrder(rootLayout)
+                        webView.visibility = View.INVISIBLE
+                        webView.postDelayed({ webView.visibility = View.VISIBLE }, 100)
+                    }, 800) // Delay to allow page to settle
                 },
                 onError = {
                     hasPageError = true
@@ -250,13 +256,13 @@ class PlayerActivity : AppCompatActivity() {
         rootLayout.addView(webView)
         if (!isCursorDisabled) {
             rootLayout.addView(cursorView)
+            // In updateCursorPosition(), add this:
+            cursorView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
             cursorView.bringToFront()
         }
 
         setContentView(rootLayout)
-        rootLayout.post {
-            fixAWVSurfaceViewZOrder(rootLayout)
-        }
+
         rootLayout.isFocusable = true
         rootLayout.isFocusableInTouchMode = true
         rootLayout.requestFocus()
@@ -283,7 +289,8 @@ class PlayerActivity : AppCompatActivity() {
         for (i in 0 until parent.childCount) {
             val child = parent.getChildAt(i)
             if (child is android.view.SurfaceView) {
-                child.setZOrderMediaOverlay(true)
+                child.setZOrderOnTop(false)
+                child.setZOrderMediaOverlay(false) //
                 Log.i(TAG, "[SurfaceView] Fixed z-order on AWV SurfaceView")
             } else if (child is ViewGroup) {
                 fixAWVSurfaceViewZOrder(child)
@@ -552,6 +559,7 @@ class PlayerActivity : AppCompatActivity() {
 
             webView.setLayerType(View.LAYER_TYPE_NONE, null)
             Log.i(TAG, "[WebView] Fire TV: hardware acceleration disabled")
+            webView.setBackgroundColor(0x00000000) // transparent
 
 //            if (isHardwareAccelerated) {
 //                webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -710,8 +718,6 @@ class PlayerActivity : AppCompatActivity() {
         if (isCursorDisabled) return
         cursorView.x = cursorX
         cursorView.y = cursorY
-        // In updateCursorPosition(), add this:
-        cursorView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         cursorView.bringToFront()
         cursorView.invalidate()
     }
