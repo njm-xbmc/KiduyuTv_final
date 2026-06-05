@@ -51,12 +51,20 @@ interface WatchHistoryDao {
     fun getTvShowWatchHistory(): Flow<List<WatchHistoryEntity>>
 
     /**
-     * Get items with incomplete playback (for Continue Watching feature).
-     * Assumes playback is incomplete if position > 0 and < some threshold.
+     * Get items for Continue Watching feature.
+     * Returns both:
+     * 1. Items with recorded playback position (in progress)
+     * 2. Items with no playback position but recent (newly added)
+     * 
+     * For TV shows, we want to show them in Continue Watching immediately after adding,
+     * even if playback hasn't started yet. This is because users may want to continue
+     * from where they left off in a previous session.
+     * 
+     * The query sorts by lastWatchedTimestamp to show most recently accessed items first.
      */
     @Query("""
         SELECT * FROM watch_history 
-        WHERE playbackPosition > 0 
+        WHERE playbackPosition > 0 OR lastWatchedTimestamp > 0
         ORDER BY lastWatchedTimestamp DESC 
         LIMIT :limit
     """)

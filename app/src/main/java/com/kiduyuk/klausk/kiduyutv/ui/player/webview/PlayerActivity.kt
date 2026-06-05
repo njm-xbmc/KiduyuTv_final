@@ -22,7 +22,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.OnBackPressedCallback
 import com.kiduyuk.klausk.kiduyutv.R
 import com.kiduyuk.klausk.kiduyutv.data.model.StreamProviderManager
+import com.kiduyuk.klausk.kiduyutv.data.model.WatchHistoryItem
+import com.kiduyuk.klausk.kiduyutv.data.repository.TmdbRepository
 import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
 
 class PlayerActivity : AppCompatActivity() {
@@ -45,6 +50,25 @@ class PlayerActivity : AppCompatActivity() {
     // Loading and error state for AdBlockerWebViewClient
     private var isPageLoading = true
     private var hasPageError = false
+
+    // Watch history tracking variables
+    private var currentTmdbId: Int = -1
+    private var currentIsTv: Boolean = false
+    private var currentTitle: String = "Unknown"
+    private var currentOverview: String? = null
+    private var currentPosterPath: String? = null
+    private var currentBackdropPath: String? = null
+    private var currentVoteAverage: Double = 0.0
+    private var currentReleaseDate: String? = null
+    private var currentPlaybackPosition: Long = 0L
+    private var isMediaInWatchHistory: Boolean = false
+
+    // 15-second progress update handler
+    private val progressUpdateHandler = Handler(Looper.getMainLooper())
+    private val progressUpdateRunnable = Runnable {
+        updateWatchProgress()
+    }
+    private val repository = TmdbRepository()
 
     /**
      * Check if the device is an Amazon Fire TV or Fire Stick.
@@ -91,6 +115,22 @@ class PlayerActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // Store media info for watch history tracking
+        currentTmdbId = tmdbId
+        currentIsTv = isTv
+        currentTitle = contentTitle
+        currentOverview = contentOverview
+        currentPosterPath = contentPosterPath
+        currentBackdropPath = contentBackdropPath
+        currentVoteAverage = contentVoteAverage
+        currentReleaseDate = contentReleaseDate
+
+        // Check if media is already in watch history and add if not
+        checkAndAddToWatchHistory()
+
+        // Start 15-second progress update timer
+        startProgressUpdateTimer()
 
         // Detect device type and show appropriate toast with device information
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
@@ -282,9 +322,13 @@ class PlayerActivity : AppCompatActivity() {
         super.onPause()
         webView.onPause()
         webView.pauseTimers()
+        // Stop progress updates when player is paused
+        stopProgressUpdateTimer()
     }
 
     override fun onDestroy() {
+        // Stop progress updates when player is destroyed
+        stopProgressUpdateTimer()
         cursorHideHandler.removeCallbacks(cursorHideRunnable)
 
         if (::webView.isInitialized) {
@@ -465,6 +509,145 @@ class PlayerActivity : AppCompatActivity() {
         cursorView.alpha = 1f
         cursorHideHandler.removeCallbacks(cursorHideRunnable)
         cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
+    }
+
+    // ── Watch History Management ─────────────────────────────────────────────
+
+    /**
+     * Checks if the media is already in watch history and adds it if not.
+     * Also syncs the new item to Firebase for cross-device access.
+     */
+    private fun checkAndAddToWatchHistory() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Check if media already exists in watch history
+                isMediaInWatchHistory = repository.isInWatchHistory(
+                    this@PlayerActivity,
+                    currentTmdbId,
+                    currentIsTv
+                )
+
+                if (!isMediaInWatchHistory) {
+                    // Add new item to watch history
+                    val watchHistoryItem = WatchHistoryItem(
+                        id = currentTmdbId,
+                        title = currentTitle,
+                        overview = currentOverview,
+                        posterPath = currentPosterPath,
+                        backdropPath = currentBackdropPath,
+                        voteAverage = currentVoteAverage,
+                        releaseDate = currentReleaseDate,
+                        isTv = currentIsTv,
+                        seasonNumber = if (currentIsTv) currentSeason else null,
+                        episodeNumber = if (currentIsTv) currentEpisode else null,
+                        lastWatched = System.currentTimeMillis(),
+                        playbackPosition = 0L
+                    )
+
+                    // Save to local Room database
+                    repository.saveToWatchHistory(this@PlayerActivity, watchHistoryItem)
+
+                    Log.i(TAG, "[WatchHistory] Added to local database: $currentTitle (ID: $currentTmdbId)")
+
+                    // Sync to Firebase for cross-device access
+                    com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.syncWatchHistory(
+                        tmdbId = currentTmdbId,
+                        isTv = currentIsTv,
+                        seasonNumber = if (currentIsTv) currentSeason else null,
+                        episodeNumber = if (currentIsTv) currentEpisode else null,
+                        playbackPosition = 0L,
+                        duration = 0L,
+                        title = currentTitle,
+                        overview = currentOverview,
+                        posterPath = currentPosterPath,
+                        backdropPath = currentBackdropPath,
+                        voteAverage = currentVoteAverage,
+                        releaseDate = currentReleaseDate
+                    )
+
+                    Log.i(TAG, "[WatchHistory] Synced to Firebase: $currentTitle (ID: $currentTmdbId)")
+                } else {
+                    Log.i(TAG, "[WatchHistory] Media already in watch history: $currentTitle (ID: $currentTmdbId)")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[WatchHistory] Error checking/adding to watch history: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Starts the 15-second periodic progress update timer.
+     * Updates watch progress in both local database and Firebase.
+     */
+    private fun startProgressUpdateTimer() {
+        progressUpdateHandler.removeCallbacks(progressUpdateRunnable)
+        progressUpdateHandler.postDelayed(progressUpdateRunnable, 15000) // 15 seconds
+    }
+
+    /**
+     * Updates the watch progress for the current media.
+     * Called every 15 seconds while playback is active.
+     * Updates both local Room database and Firebase for cross-device sync.
+     */
+    private fun updateWatchProgress() {
+        if (currentTmdbId == -1) return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Increment playback position (simulated for WebView - in a real implementation,
+                // this would be obtained from the video player's actual position)
+                currentPlaybackPosition += 15000 // 15 seconds in milliseconds
+
+                // Update local Room database
+                repository.updatePlaybackPosition(
+                    mediaId = currentTmdbId,
+                    mediaType = if (currentIsTv) "tv" else "movie",
+                    position = currentPlaybackPosition
+                )
+
+                // If this is a TV show, also update episode info
+                if (currentIsTv) {
+                    repository.updateEpisodeInfo(
+                        mediaId = currentTmdbId,
+                        mediaType = "tv",
+                        seasonNumber = currentSeason,
+                        episodeNumber = currentEpisode
+                    )
+                }
+
+                Log.d(TAG, "[WatchHistory] Updated progress for $currentTitle: $currentPlaybackPosition ms")
+
+                // Sync to Firebase for cross-device access
+                com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.syncWatchHistory(
+                    tmdbId = currentTmdbId,
+                    isTv = currentIsTv,
+                    seasonNumber = if (currentIsTv) currentSeason else null,
+                    episodeNumber = if (currentIsTv) currentEpisode else null,
+                    playbackPosition = currentPlaybackPosition,
+                    duration = 0L, // Duration would need to be obtained from the player
+                    title = currentTitle,
+                    overview = currentOverview,
+                    posterPath = currentPosterPath,
+                    backdropPath = currentBackdropPath,
+                    voteAverage = currentVoteAverage,
+                    releaseDate = currentReleaseDate
+                )
+
+                Log.d(TAG, "[WatchHistory] Synced progress to Firebase for $currentTitle")
+            } catch (e: Exception) {
+                Log.e(TAG, "[WatchHistory] Error updating progress: ${e.message}")
+            }
+        }
+
+        // Schedule next update
+        progressUpdateHandler.postDelayed(progressUpdateRunnable, 15000)
+    }
+
+    /**
+     * Stops the progress update timer when leaving the player.
+     */
+    private fun stopProgressUpdateTimer() {
+        progressUpdateHandler.removeCallbacks(progressUpdateRunnable)
     }
 }
 
