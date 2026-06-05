@@ -254,6 +254,9 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         setContentView(rootLayout)
+        rootLayout.post {
+            fixAWVSurfaceViewZOrder(rootLayout)
+        }
         rootLayout.isFocusable = true
         rootLayout.isFocusableInTouchMode = true
         rootLayout.requestFocus()
@@ -274,6 +277,18 @@ class PlayerActivity : AppCompatActivity() {
                 showExitConfirmationDialog()
             }
         })
+    }
+
+    private fun fixAWVSurfaceViewZOrder(parent: ViewGroup) {
+        for (i in 0 until parent.childCount) {
+            val child = parent.getChildAt(i)
+            if (child is android.view.SurfaceView) {
+                child.setZOrderMediaOverlay(true)
+                Log.i(TAG, "[SurfaceView] Fixed z-order on AWV SurfaceView")
+            } else if (child is ViewGroup) {
+                fixAWVSurfaceViewZOrder(child)
+            }
+        }
     }
 
     /**
