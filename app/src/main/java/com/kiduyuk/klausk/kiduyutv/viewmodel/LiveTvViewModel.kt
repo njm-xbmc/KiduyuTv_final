@@ -12,15 +12,18 @@ import com.kiduyuk.klausk.kiduyutv.data.model.EpgProgram
 import com.kiduyuk.klausk.kiduyutv.data.model.IptvChannel
 import com.kiduyuk.klausk.kiduyutv.data.model.IptvPlaylist
 import com.kiduyuk.klausk.kiduyutv.data.repository.IptvRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
