@@ -87,7 +87,7 @@
             android:textSize="14sp"
             android:textStyle="bold"
             app:drawableStartCompat="@drawable/ic_copy"
-            app:drawablePadding="4dp"
+            android:drawablePadding="4dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
