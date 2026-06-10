@@ -1,10 +1,9 @@
 package com.kiduyuk.klausk.kiduyutv.util
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -83,9 +82,9 @@ object TraktAuthManager {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    // ── Encrypted SharedPreferences ───────────────────────────────────────────
+    // ── SharedPreferences ────────────────────────────────────────────────────
 
-    private const val PREFS_NAME        = "trakt_auth_prefs"
+    private const val PREFS_NAME        = "trakt_prefs"
     private const val PREF_ACCESS_TOKEN  = "access_token"
     private const val PREF_REFRESH_TOKEN = "refresh_token"
     private const val PREF_EXPIRES_AT    = "expires_at"
@@ -95,8 +94,8 @@ object TraktAuthManager {
      * Non-nullable after [init] is called. Accessing any token method before
      * [init] will throw [IllegalStateException] via the [prefs] property.
      */
-    private var _prefs: androidx.security.crypto.EncryptedSharedPreferences? = null
-    private val prefs: androidx.security.crypto.EncryptedSharedPreferences
+    private var _prefs: SharedPreferences? = null
+    private val prefs: SharedPreferences
         get() = _prefs
             ?: error("TraktAuthManager.init(context) must be called before using this object.")
 
@@ -109,18 +108,7 @@ object TraktAuthManager {
     fun init(context: Context) {
         if (_prefs != null) return
 
-        val masterKey = MasterKey.Builder(context.applicationContext)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-
-        @Suppress("UNCHECKED_CAST")
-        _prefs = EncryptedSharedPreferences.create(
-            context.applicationContext,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        ) as androidx.security.crypto.EncryptedSharedPreferences
+        _prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         loadStoredTokens()
     }
@@ -148,7 +136,7 @@ object TraktAuthManager {
                 _refreshToken.value         = storedRefresh
                 _userName.value             = storedUser
                 _isTraktAuthenticated.value = true
-                Log.i(TAG, "Trakt tokens loaded from encrypted storage")
+                Log.i(TAG, "Trakt tokens loaded from storage")
             }
             storedRefresh != null -> {
                 // Token exists but has expired — refresh in the background.

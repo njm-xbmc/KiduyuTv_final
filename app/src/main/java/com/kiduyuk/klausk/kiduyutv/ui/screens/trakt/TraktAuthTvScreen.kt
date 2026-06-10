@@ -116,7 +116,7 @@ private fun CodeLayout(
 ) {
     Row(
         modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(64.dp),
+        horizontalArrangement = Arrangement.spacedBy(30.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Left side - Instructions
@@ -133,14 +133,14 @@ private fun CodeLayout(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
                         tint = AuthTextPrimary,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-                Spacer(Modifier.width(12.dp))
+                //Spacer(Modifier.width(12.dp))
                 Text(
                     text = "Trakt",
                     color = AuthTextPrimary,
-                    fontSize = 24.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -150,55 +150,55 @@ private fun CodeLayout(
             Text(
                 text = "Sign in with Trakt",
                 color = AuthTextPrimary,
-                fontSize = 56.sp,
+                fontSize = 25.sp,
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
 
             Text(
                 text = "Use one of the options below to connect your Trakt account:",
                 color = AuthTextSecondary,
-                fontSize = 22.sp
+                fontSize = 15.sp
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(10.dp))
 
             // Options
             InstructionOption(
                 title = "Option 1 - Activate on Your Phone",
                 description = "Go to https://trakt.tv/activate and enter the code shown on this screen."
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(10.dp))
             InstructionOption(
                 title = "Option 2 - Scan to Sign In",
                 description = "Scan the QR code with your phone, sign in to Trakt, then scan again if prompted."
             )
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(20.dp))
 
             // Activation Code Section
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Activation Code: ",
                     color = AuthTextPrimary,
-                    fontSize = 28.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = state.userCode.uppercase(),
                     color = TraktOrange,
-                    fontSize = 48.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(10.dp))
 
             Text(
                 text = "This screen will close automatically once your device is authorized.",
                 color = AuthTextSecondary,
-                fontSize = 18.sp
+                fontSize = 10.sp
             )
         }
 
@@ -209,7 +209,7 @@ private fun CodeLayout(
         ) {
             Box(
                 modifier = Modifier
-                    .size(320.dp)
+                    .size(180.dp)
                     .background(Color.White, RoundedCornerShape(4.dp))
                     .padding(8.dp),
                 contentAlignment = Alignment.Center
@@ -220,7 +220,7 @@ private fun CodeLayout(
                     // Placeholder - QR code will be provided via qrCodeContent
                     Box(
                         modifier = Modifier
-                            .size(300.dp)
+                            .size(150.dp)
                             .background(AuthCardBg, RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -232,7 +232,7 @@ private fun CodeLayout(
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
                 text = "https://trakt.tv/activate",
                 color = AuthTextPrimary,
@@ -248,14 +248,14 @@ private fun InstructionOption(title: String, description: String) {
         Text(
             text = title,
             color = AuthTextPrimary,
-            fontSize = 28.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Medium
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(5.dp))
         Text(
             text = description,
             color = AuthTextSecondary,
-            fontSize = 20.sp
+            fontSize = 15.sp
         )
     }
 }

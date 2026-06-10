@@ -37,6 +37,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import androidx.core.net.toUri
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Activity that handles Trakt.tv OAuth 2.0 authentication using the Device Code Flow.
@@ -370,7 +372,7 @@ class TraktAuthActivity : AppCompatActivity() {
                     userName = json.optJSONObject("user")?.optString("username")
                 )
                 
-                delay(1500) // Brief delay to show success state
+                delay(1500.milliseconds) // Brief delay to show success state
                 onAuthSuccess()
             } catch (e: Exception) {
                 showError("Failed to save tokens: ${e.message}")
@@ -382,7 +384,7 @@ class TraktAuthActivity : AppCompatActivity() {
 
     private fun openAuthorizationPage() {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(TraktAuthManager.getAuthorizationUrl()))
+            val intent = Intent(Intent.ACTION_VIEW, TraktAuthManager.getAuthorizationUrl().toUri())
             startActivity(intent)
         } catch (e: Exception) {
             showError("No browser app found to open Trakt.tv.")

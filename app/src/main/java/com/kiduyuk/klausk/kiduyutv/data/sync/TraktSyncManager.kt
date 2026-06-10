@@ -217,10 +217,11 @@ class TraktSyncManager @Inject constructor(
     }
 
     companion object {
-        private const val PREFS_NAME = "trakt_sync_prefs"
-        private const val KEY_LAST_SYNC = "last_sync_time"
-        private const val KEY_WATCH_HISTORY = "watch_history"
-        private const val KEY_COLLECTION = "collection"
-        private const val KEY_WATCHLIST = "watchlist"
+        // Use same SharedPreferences file as TraktAuthManager for consistency
+        private const val PREFS_NAME = "trakt_prefs"
+        private const val KEY_LAST_SYNC = "sync_last_time"
+        private const val KEY_WATCH_HISTORY = "sync_watch_history"
+        private const val KEY_COLLECTION = "sync_collection"
+        private const val KEY_WATCHLIST = "sync_watchlist"
     }
 }
