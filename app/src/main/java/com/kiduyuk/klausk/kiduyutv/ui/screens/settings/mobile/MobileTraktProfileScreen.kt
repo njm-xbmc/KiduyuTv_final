@@ -1,26 +1,21 @@
-package com.kiduyuk.klausk.kiduyutv.ui.screens.settings.tv
+package com.kiduyuk.klausk.kiduyutv.ui.screens.settings.mobile
 
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +27,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -41,8 +37,9 @@ import com.kiduyuk.klausk.kiduyutv.data.model.TvShow
 import com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktUser
 import com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient
 import com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository
-import com.kiduyuk.klausk.kiduyutv.ui.components.MovieCard
-import com.kiduyuk.klausk.kiduyutv.ui.components.TvShowCard
+import com.kiduyuk.klausk.kiduyutv.ui.components.LottieLoadingView
+import com.kiduyuk.klausk.kiduyutv.ui.components.mobile.MobileMovieCard
+import com.kiduyuk.klausk.kiduyutv.ui.components.mobile.MobileTvShowCard
 import com.kiduyuk.klausk.kiduyutv.ui.theme.*
 import com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager
 import com.kiduyuk.klausk.kiduyutv.viewmodel.MyListItem
@@ -50,14 +47,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Trakt Profile Screen - displays user profile information from Trakt.tv
- * Now with tabs for Collection, Watchlist and Recommendations.
+ * Mobile Trakt Profile Screen - displays user profile and tabs for Collection, Watchlist and Recommendations.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TraktProfileScreen(
+fun MobileTraktProfileScreen(
     onBackClick: () -> Unit,
-    onMovieClick: (Int) -> Unit = {},
-    onTvShowClick: (Int) -> Unit = {}
+    onMovieClick: (Int) -> Unit,
+    onTvShowClick: (Int) -> Unit
 ) {
     val context = LocalContext.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -81,7 +78,7 @@ fun TraktProfileScreen(
                 val response = TraktApiClient.apiService.getUserProfile("Bearer $token")
                 if (response.isSuccessful) {
                     profile = response.body()
-                    Log.i("TraktProfileScreen", "Profile loaded: $profile")
+                    Log.i("MobileTraktProfile", "Profile loaded: $profile")
                 } else {
                     profileError = "Failed to load profile: ${response.code()}"
                 }
@@ -95,125 +92,49 @@ fun TraktProfileScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BackgroundDark)
-            .padding(24.dp)
-    ) {
-        // Header
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            IconButton(
-                onClick = onBackClick,
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(color = CardDark, shape = RoundedCornerShape(12.dp))
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = TextPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = PrimaryRed.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = "Trakt.tv",
-                    color = PrimaryRed,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Profile Info Header (Avatar and Username)
-        if (profile != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
-                val avatarUrl = remember(profile!!.username) {
-                    "https://avatar-redcircle.trakt.tv/${profile!!.username}.png"
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(CardDark)
-                        .border(2.dp, PrimaryRed, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AsyncImage(
-                        model = avatarUrl,
-                        contentDescription = "Profile Avatar",
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                Column {
-                    Text(
-                        text = profile!!.username,
-                        color = TextPrimary,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (!profile!!.name.isNullOrBlank()) {
-                        Text(
-                            text = profile!!.name!!,
-                            color = TextSecondary,
-                            fontSize = 16.sp
-                        )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Trakt Profile", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                     }
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-        } else if (isLoadingProfile) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(40.dp), color = PrimaryRed)
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(text = "Loading profile...", color = TextSecondary)
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        // Content Container
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = BackgroundDark)
+            )
+        },
+        containerColor = BackgroundDark
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(24.dp))
-                .background(SurfaceDark)
-                .padding(32.dp)
+                .padding(innerPadding)
         ) {
+            // Profile Header
+            if (profile != null) {
+                MobileProfileHeader(profile = profile!!)
+            } else if (isLoadingProfile) {
+                Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = PrimaryRed, modifier = Modifier.size(32.dp))
+                }
+            } else if (profileError != null) {
+                Text(
+                    text = profileError!!,
+                    color = Color.Red,
+                    modifier = Modifier.padding(16.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
+
             // Tab Row
-            ScrollableTabRow(
+            TabRow(
                 selectedTabIndex = selectedTabIndex,
-                containerColor = Color.Transparent,
+                containerColor = BackgroundDark,
                 contentColor = PrimaryRed,
-                edgePadding = 0.dp,
-                divider = {},
+                divider = { HorizontalDivider(color = TextTertiary.copy(alpha = 0.1f)) },
                 indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
+                    SecondaryIndicator(
                         modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
                         color = PrimaryRed
                     )
@@ -226,7 +147,7 @@ fun TraktProfileScreen(
                         text = {
                             Text(
                                 text = title,
-                                fontSize = 16.sp,
+                                fontSize = 14.sp,
                                 fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Medium,
                                 color = if (selectedTabIndex == index) PrimaryRed else TextSecondary
                             )
@@ -235,24 +156,22 @@ fun TraktProfileScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
             // Tab Content
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTabIndex) {
-                    0 -> TraktMediaTabContent(
+                    0 -> MobileTraktMediaTabContent(
                         traktRepository = traktRepository,
                         tabType = "collection",
                         onMovieClick = onMovieClick,
                         onTvShowClick = onTvShowClick
                     )
-                    1 -> TraktMediaTabContent(
+                    1 -> MobileTraktMediaTabContent(
                         traktRepository = traktRepository,
                         tabType = "watchlist",
                         onMovieClick = onMovieClick,
                         onTvShowClick = onTvShowClick
                     )
-                    2 -> TraktMediaTabContent(
+                    2 -> MobileTraktMediaTabContent(
                         traktRepository = traktRepository,
                         tabType = "recommendations",
                         onMovieClick = onMovieClick,
@@ -265,61 +184,79 @@ fun TraktProfileScreen(
 }
 
 @Composable
-private fun LoadingIndicator(message: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+private fun MobileProfileHeader(profile: TraktUser) {
+    val avatarUrl = remember(profile.username) {
+        "https://avatar-redcircle.trakt.tv/${profile.username}.png"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(CardDark)
+                .border(2.dp, PrimaryRed, CircleShape),
+            contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(48.dp),
-                color = PrimaryRed,
-                strokeWidth = 3.dp
-            )
-            Text(
-                text = message,
-                color = TextSecondary,
-                fontSize = 16.sp
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "Profile Avatar",
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
             )
         }
-    }
-}
 
-@Composable
-private fun ErrorMessage(message: String, onBackClick: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = TextSecondary,
-                modifier = Modifier.size(64.dp)
-            )
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column {
             Text(
-                text = message,
-                color = Color(0xFFFF6B6B),
-                fontSize = 16.sp,
-                textAlign = TextAlign.Center
+                text = profile.username,
+                color = TextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedButton(onClick = onBackClick) {
-                Text("Go Back")
+            if (!profile.name.isNullOrBlank()) {
+                Text(
+                    text = profile.name!!,
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (profile.vip) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "VIP Member",
+                        color = Color(0xFFFFD700),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TraktMediaTabContent(
+private fun MobileTraktMediaTabContent(
     traktRepository: TraktRepository,
     tabType: String,
     onMovieClick: (Int) -> Unit,
@@ -388,7 +325,7 @@ private fun TraktMediaTabContent(
                             }
                         }
                     }.onFailure { e ->
-                        Log.e("TraktProfileScreen", "Failed to fetch $tabType $type: ${e.message}")
+                        Log.e("MobileTraktProfile", "Failed to fetch $tabType $type: ${e.message}")
                     }
                 }
             }
@@ -422,11 +359,8 @@ private fun TraktMediaTabContent(
                                     )
                                 }
                             }
-                        } catch (e: Exception) {
-                            Log.e("TraktProfileScreen", "Failed to fetch TMDB details for ${item.type}-${item.id}: ${e.message}")
-                        }
+                        } catch (e: Exception) { }
                     } else if (item.posterPath == null && cachedPath != null) {
-                        // Use cached poster if available
                         withContext(Dispatchers.Main) {
                             mediaItems = mediaItems.toMutableList().apply {
                                 this[index] = this[index].copy(posterPath = cachedPath)
@@ -443,17 +377,19 @@ private fun TraktMediaTabContent(
     }
 
     if (isLoading && mediaItems.isEmpty()) {
-        LoadingIndicator("Loading $tabType...")
-    } else if (error != null && mediaItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "Error: $error", color = Color.Red)
+            LottieLoadingView(size = 150.dp)
+        }
+    } else if (error != null && mediaItems.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Text(text = "Error: $error", color = Color.Red, textAlign = TextAlign.Center)
         }
     } else if (mediaItems.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "No items found in your $tabType.", color = TextSecondary)
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Text(text = "No items found in your $tabType.", color = TextSecondary, textAlign = TextAlign.Center)
         }
     } else {
-        TraktMediaGrid(
+        MobileTraktMediaGrid(
             items = mediaItems,
             onMovieClick = onMovieClick,
             onTvShowClick = onTvShowClick
@@ -462,31 +398,36 @@ private fun TraktMediaTabContent(
 }
 
 @Composable
-private fun TraktMediaGrid(
+private fun MobileTraktMediaGrid(
     items: List<MyListItem>,
     onMovieClick: (Int) -> Unit,
     onTvShowClick: (Int) -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
-    val spacing = 16.dp
-    val columns = 6
-    val calculatedCardWidth = (screenWidth - 100.dp - (spacing * (columns - 1))) / columns
+    val horizontalPadding = 16.dp
+    val spacing = 10.dp
+    val availableWidth = screenWidth - (horizontalPadding * 2)
+    val minCardWidth = 110.dp
+    val actualColumns = maxOf(3, minOf(5, ((availableWidth + spacing) / (minCardWidth + spacing)).toInt()))
+    val calculatedCardWidth = (availableWidth - (spacing * (actualColumns - 1))) / actualColumns
     val calculatedCardHeight = calculatedCardWidth * 1.5f
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
+        columns = GridCells.Fixed(actualColumns),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 32.dp),
+        contentPadding = PaddingValues(
+            start = horizontalPadding,
+            end = horizontalPadding,
+            top = 12.dp,
+            bottom = 16.dp
+        ),
         horizontalArrangement = Arrangement.spacedBy(spacing),
         verticalArrangement = Arrangement.spacedBy(spacing)
     ) {
         items(items) { item ->
-            val interactionSource = remember { MutableInteractionSource() }
-            val isFocused by interactionSource.collectIsFocusedAsState()
-
             if (item.type == "movie") {
-                MovieCard(
+                MobileMovieCard(
                     movie = Movie(
                         id = item.id,
                         title = item.title,
@@ -494,22 +435,17 @@ private fun TraktMediaGrid(
                         posterPath = item.posterPath,
                         backdropPath = null,
                         voteAverage = item.voteAverage,
-                        releaseDate = null,
-                        genreIds = null,
+                        releaseDate = "",
+                        genreIds = emptyList(),
                         popularity = 0.0
                     ),
-                    isSelected = isFocused,
                     onClick = { onMovieClick(item.id) },
                     modifier = Modifier
                         .width(calculatedCardWidth)
                         .height(calculatedCardHeight)
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null
-                        ) { onMovieClick(item.id) }
                 )
             } else {
-                TvShowCard(
+                MobileTvShowCard(
                     tvShow = TvShow(
                         id = item.id,
                         name = item.title,
@@ -517,35 +453,16 @@ private fun TraktMediaGrid(
                         posterPath = item.posterPath,
                         backdropPath = null,
                         voteAverage = item.voteAverage,
-                        firstAirDate = null,
-                        genreIds = null,
+                        firstAirDate = "",
+                        genreIds = emptyList(),
                         popularity = 0.0
                     ),
-                    isSelected = isFocused,
                     onClick = { onTvShowClick(item.id) },
                     modifier = Modifier
                         .width(calculatedCardWidth)
                         .height(calculatedCardHeight)
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null
-                        ) { onTvShowClick(item.id) }
                 )
             }
         }
-    }
-}
-
-private fun formatTraktDate(dateString: String): String {
-    return try {
-        // Trakt date format: 2010-09-01T12:34:56.000Z
-        val parts = dateString.split("T")
-        if (parts.isNotEmpty()) {
-            parts[0] // Return just the date part
-        } else {
-            dateString
-        }
-    } catch (e: Exception) {
-        dateString
     }
 }
