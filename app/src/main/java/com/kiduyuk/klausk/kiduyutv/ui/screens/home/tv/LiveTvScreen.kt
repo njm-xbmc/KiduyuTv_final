@@ -43,6 +43,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import android.os.Build
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import android.widget.Toast
@@ -1541,13 +1542,15 @@ private fun SearchContent(
     onCloseSearch: () -> Unit,
     onBackClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val backFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
+    val firstSearchResultFocusRequester = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
-
-    // Track current IME action based on keyboard type
-    var currentImeAction by remember { mutableStateOf(ImeAction.Search) }
+    val coroutineScope = rememberCoroutineScope()
+    val isFireTv = remember(context) { isFireTVDevice(context) }
+    val currentImeAction = if (isFireTv) ImeAction.Next else ImeAction.Search
 
     // Request focus on search field when screen opens
     LaunchedEffect(Unit) {
@@ -1560,6 +1563,12 @@ private fun SearchContent(
         if (query.isNotBlank()) {
             // Already searched via onValueChange, just clear focus
             focusManager.clearFocus()
+            if (searchResults.isNotEmpty()) {
+                coroutineScope.launch {
+                    delay(50)
+                    firstSearchResultFocusRequester.requestFocus()
+                }
+            }
         }
     }
 
@@ -1688,15 +1697,35 @@ private fun SearchContent(
                     .padding(bottom = 16.dp)
             ) {
                 itemsIndexed(searchResults, key = { index, channel -> "${channel.id}_$index" }) { index, channel ->
+                    val modifier = if (index == 0) {
+                        Modifier
+                            .focusRequester(firstSearchResultFocusRequester)
+                            .focusable()
+                    } else {
+                        Modifier
+                    }
+
                     ChannelCard(
                         channel = channel,
-                        modifier = Modifier,
+                        modifier = modifier,
                         onClick = { onChannelClick(channel) }
                     )
                 }
             }
         }
     }
+}
+
+/**
+ * Check if the device is an Amazon Fire TV or Fire Stick.
+ * Uses two methods for maximum compatibility:
+ * 1. Checks for amazon.hardware.fire_tv system feature
+ * 2. Falls back to checking if Build.MODEL starts with "AFT"
+ */
+private fun isFireTVDevice(context: Context): Boolean {
+    val isFireTvHardware = context.packageManager.hasSystemFeature("amazon.hardware.fire_tv")
+    val isFireTvModel = Build.MODEL.startsWith("AFT", ignoreCase = true)
+    return isFireTvHardware || isFireTvModel
 }
 
 /**
