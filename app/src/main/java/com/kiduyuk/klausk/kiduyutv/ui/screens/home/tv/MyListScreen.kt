@@ -89,6 +89,9 @@ fun MyListScreen(
     val _watchedItems = remember { MutableStateFlow<List<MyListItem>>(emptyList()) }
     val watchedItems: StateFlow<List<MyListItem>> = _watchedItems.asStateFlow()
 
+    // Loading state for Trakt history
+    val isLoadingTrakt by remember { mutableStateOf(false) }
+
     // Fetch Trakt watched history when connected
     LaunchedEffect(isTraktConnected) {
         Log.i("MyListScreen", "isTraktConnected: $isTraktConnected")
@@ -271,11 +274,64 @@ fun MyListScreen(
                         isTraktConnected && selectedTabIndex == 0 -> "No watched history from Trakt yet."
                         else -> "No ${tabs[selectedTabIndex]} saved yet."
                     }
-                    Text(
-                        text = emptyMessage,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextSecondary
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = emptyMessage,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextSecondary
+                        )
+                        if (isTraktConnected && selectedTabIndex == 0) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    // Trigger a manual refresh
+                                    _traktWatchHistory.value = emptyList()
+                                    _watchedItems.value = emptyList()
+                                    LaunchedEffect(Unit) {
+                                        traktRepository.getTraktWatchHistory(page = 1, limit = 100).collect { result ->
+                                            result.fold(
+                                                onSuccess = { history ->
+                                                    _traktWatchHistory.value = history
+                                                    val items = mutableListOf<MyListItem>()
+                                                    history.forEach { item ->
+                                                        when (item.type) {
+                                                            "movies" -> item.movie?.ids?.tmdb?.let { tmdbId ->
+                                                                val cacheKey = "movie-$tmdbId"
+                                                                val posterPath = posterCache.getOrPut(cacheKey) {
+                                                                    try {
+                                                                        tmdbApiService.getMovieDetail(tmdbId).posterPath
+                                                                    } catch (e: Exception) { null }
+                                                                }
+                                                                items.add(MyListItem(id = tmdbId, title = item.movie?.title ?: "Unknown", posterPath = posterPath, type = "movie", voteAverage = item.movie?.rating ?: 0.0))
+                                                            }
+                                                            "shows" -> item.show?.ids?.tmdb?.let { tmdbId ->
+                                                                val cacheKey = "tv-$tmdbId"
+                                                                val posterPath = posterCache.getOrPut(cacheKey) {
+                                                                    try {
+                                                                        tmdbApiService.getTvShowDetail(tmdbId).posterPath
+                                                                    } catch (e: Exception) { null }
+                                                                }
+                                                                items.add(MyListItem(id = tmdbId, title = item.show?.title ?: "Unknown", posterPath = posterPath, type = "tv", voteAverage = item.show?.rating ?: 0.0))
+                                                            }
+                                                        }
+                                                    }
+                                                    _watchedItems.value = items.distinctBy { "${it.type}-${it.id}" }
+                                                },
+                                                onFailure = { }
+                                            )
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Text("Fetch Watched History")
+                            }
+                        }
+                    }
                 }
             } else {
                 LazyVerticalGrid(
