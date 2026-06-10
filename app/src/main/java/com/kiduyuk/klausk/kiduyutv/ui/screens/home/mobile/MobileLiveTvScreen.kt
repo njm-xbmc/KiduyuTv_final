@@ -6,13 +6,22 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import com.kiduyuk.klausk.kiduyutv.ui.theme.PrimaryRed
+import com.kiduyuk.klausk.kiduyutv.ui.theme.TextSecondary
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -104,33 +113,96 @@ fun MobileLiveTvScreen(
                 // Tab content
                 when (selectedTab) {
                     0 -> {
-                        // Live TV tab - categories and channels
-                        if (uiState.selectedCategory == null) {
-                            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
-                                items(uiState.categories) { category ->
-                                    CategoryRow(category.name, category.channelCount) {
-                                        viewModel.selectCategory(category.name)
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            OutlinedTextField(
+                                value = uiState.searchQuery,
+                                onValueChange = { viewModel.updateSearchQuery(it) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                placeholder = { Text("Search channels...") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Search, contentDescription = "Search")
+                                },
+                                trailingIcon = {
+                                    if (uiState.searchQuery.isNotBlank()) {
+                                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                            Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF121212),
+                                    unfocusedContainerColor = Color(0xFF121212),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedPlaceholderColor = Color.LightGray,
+                                    unfocusedPlaceholderColor = Color.LightGray,
+                                    focusedBorderColor = PrimaryRed,
+                                    unfocusedBorderColor = TextSecondary
+                                ),
+                                singleLine = true
+                            )
+
+                            if (uiState.searchQuery.isNotBlank()) {
+                                if (uiState.searchResults.isEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(text = "No channels match \"${uiState.searchQuery}\"", color = TextSecondary)
+                                    }
+                                } else {
+                                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+                                        items(uiState.searchResults) { channel ->
+                                            ChannelRow(channel) { selected ->
+                                                val intent = IptvPlayerActivity.createIntent(
+                                                    context,
+                                                    selected.name,
+                                                    selected.url,
+                                                    selected.logo,
+                                                    selected.tvgId,
+                                                    selected.tvgName,
+                                                    selected.group
+                                                )
+                                                context.startActivity(intent)
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
+                                    }
                                 }
-                            }
-                        } else {
-                            // Channels list for selected category
-                            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
-                                items(uiState.channels) { channel ->
-                                    ChannelRow(channel) { selected ->
-                                        val intent = IptvPlayerActivity.createIntent(
-                                            context,
-                                            selected.name,
-                                            selected.url,
-                                            selected.logo,
-                                            selected.tvgId,
-                                            selected.tvgName,
-                                            selected.group
-                                        )
-                                        context.startActivity(intent)
+                            } else {
+                                if (uiState.selectedCategory == null) {
+                                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+                                        items(uiState.categories) { category ->
+                                            CategoryRow(category.name, category.channelCount) {
+                                                viewModel.selectCategory(category.name)
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                } else {
+                                    // Channels list for selected category
+                                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
+                                        items(uiState.channels) { channel ->
+                                            ChannelRow(channel) { selected ->
+                                                val intent = IptvPlayerActivity.createIntent(
+                                                    context,
+                                                    selected.name,
+                                                    selected.url,
+                                                    selected.logo,
+                                                    selected.tvgId,
+                                                    selected.tvgName,
+                                                    selected.group
+                                                )
+                                                context.startActivity(intent)
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                        }
+                                    }
                                 }
                             }
                         }
