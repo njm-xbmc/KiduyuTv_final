@@ -116,6 +116,10 @@ fun MobileSettingsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadSettingsData(context)
+        // Initialize the Live TV ViewModel so its favorites prefs are
+        // loaded; otherwise getFavoriteChannels() returns an empty list
+        // (prefs == null) and settings shows 0 saved.
+        liveTvViewModel.initialize(context)
     }
 
     // Show sign-in error toast
@@ -396,7 +400,9 @@ fun MobileSettingsScreen(
 
             // ── My Channels (Favorites) Section ──────────────────────────────────
             SettingsGroup(title = "My Channels") {
-                val favoriteChannels = liveTvViewModel.getFavoriteChannels()
+                // Observe the reactive StateFlow so the count updates as
+                // favorites are added/removed anywhere in the app.
+                val favoriteChannels by liveTvViewModel.favoriteChannels.collectAsState()
                 SettingsItem(
                     icon = Icons.Default.PlaylistRemove,
                     title = "Clear Local Favorites",
