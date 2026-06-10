@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
@@ -55,14 +57,11 @@ class TraktAuthActivity : AppCompatActivity() {
     // ── Phone-only XML view references ───────────────────────────────────────
     private var loadingContainer: LinearLayout? = null
     private var errorContainer: LinearLayout? = null
-    private var codeContainer: LinearLayout? = null
+    private var codeContainer: View? = null
+    private var webView: WebView? = null
     private var tvLoadingMessage: TextView? = null
     private var tvErrorMessage: TextView? = null
     private var tvVerificationUrl: TextView? = null
-    private var tvPollingStatus: TextView? = null
-    private var etAuthorizationCode: EditText? = null
-    private var btnOpenBrowser: Button? = null
-    private var btnConnect: Button? = null
     private var btnBack: ImageButton? = null
     private var btnRetry: Button? = null
     private var btnCopyCode: TextView? = null
@@ -109,7 +108,11 @@ class TraktAuthActivity : AppCompatActivity() {
             this,
             object : androidx.activity.OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    cancelAndFinish()
+                    if (!isTvDevice && webView?.canGoBack() == true) {
+                        webView?.goBack()
+                    } else {
+                        cancelAndFinish()
+                    }
                 }
             }
         )
@@ -153,29 +156,29 @@ class TraktAuthActivity : AppCompatActivity() {
         loadingContainer = findViewById(R.id.loadingContainer)
         errorContainer = findViewById(R.id.errorContainer)
         codeContainer = findViewById(R.id.codeContainer)
+        webView = findViewById(R.id.webView)
         tvLoadingMessage = findViewById(R.id.tvLoadingMessage)
         tvErrorMessage = findViewById(R.id.tvErrorMessage)
         tvVerificationUrl = findViewById(R.id.tvVerificationUrl)
-        tvPollingStatus = findViewById(R.id.tvPollingStatus)
-        etAuthorizationCode = findViewById(R.id.etAuthorizationCode)
-        btnOpenBrowser = findViewById(R.id.btnOpenBrowser)
-        btnConnect = findViewById(R.id.btnConnect)
         btnBack = findViewById(R.id.btnBack)
         btnRetry = findViewById(R.id.btnRetry)
         btnCopyCode = findViewById(R.id.btnCopyCode)
 
+        webView?.apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            webViewClient = WebViewClient()
+        }
+
         btnBack?.setOnClickListener { cancelAndFinish() }
         btnRetry?.setOnClickListener { startDeviceCodeFlow() }
-        btnOpenBrowser?.setOnClickListener { openAuthorizationPage() }
-        btnConnect?.setOnClickListener { submitAuthorizationCode() }
 
         btnCopyCode?.setOnClickListener {
-            val url = tvVerificationUrl?.text?.toString().orEmpty()
-            if (url.isNotBlank()) {
+            if (userCode.isNotBlank()) {
                 val service = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("Trakt URL", url)
+                val clip = android.content.ClipData.newPlainText("Trakt Code", userCode)
                 service.setPrimaryClip(clip)
-                Toast.makeText(this, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Code copied to clipboard", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -217,8 +220,8 @@ class TraktAuthActivity : AppCompatActivity() {
                         startPolling(interval)
                     } else {
                         phoneShowCodeContainer()
-                        tvVerificationUrl?.text = verificationUrl
-                        tvPollingStatus?.text = "User Code: $userCode\nWaiting for authorization…"
+                        tvVerificationUrl?.text = userCode
+                        webView?.loadUrl("https://trakt.tv/activate")
                         startPolling(interval)
                     }
                 } else {
@@ -298,8 +301,6 @@ class TraktAuthActivity : AppCompatActivity() {
                                 verificationUrl = "https://trakt.tv/activate",
                                 pollMessage = result.message
                             )
-                        } else {
-                            tvPollingStatus?.text = "User Code: $userCode\n${result.message}"
                         }
                     }
                     is PollingResult.Error -> {
@@ -376,41 +377,6 @@ class TraktAuthActivity : AppCompatActivity() {
                 onAuthSuccess()
             } catch (e: Exception) {
                 showError("Failed to save tokens: ${e.message}")
-            }
-        }
-    }
-
-    // ── Legacy phone flow (not used for TV) ─────────────────────────────────
-
-    private fun openAuthorizationPage() {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW, TraktAuthManager.getAuthorizationUrl().toUri())
-            startActivity(intent)
-        } catch (e: Exception) {
-            showError("No browser app found to open Trakt.tv.")
-        }
-    }
-
-    private fun submitAuthorizationCode() {
-        val code = etAuthorizationCode?.text?.toString().orEmpty().trim()
-
-        if (code.isBlank()) {
-            showError("Enter the authorization code from Trakt.tv first.")
-            return
-        }
-
-        showPhoneLoading("Verifying your Trakt.tv code…")
-
-        lifecycleScope.launch {
-            try {
-                val success = traktAuthManager.exchangeCodeForTokens(code)
-                if (success) {
-                    onAuthSuccess()
-                } else {
-                    showError("Trakt.tv rejected the code. Please open Trakt again and try once more.")
-                }
-            } catch (e: Exception) {
-                showError("Error: ${e.message}")
             }
         }
     }

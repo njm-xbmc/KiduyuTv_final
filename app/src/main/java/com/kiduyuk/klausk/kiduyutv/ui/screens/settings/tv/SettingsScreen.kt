@@ -2752,6 +2752,7 @@ private fun TraktContent(
     }
     val isConnected by traktAuthManager.isTraktAuthenticated.collectAsState()
     val username by traktAuthManager.userName.collectAsState()
+    val userAvatarUrl by traktAuthManager.userAvatarUrl.collectAsState()
 
     Column(
         modifier = Modifier
@@ -2785,9 +2786,6 @@ private fun TraktContent(
                 ) {
                     if (isConnected) {
                         // Show profile avatar when connected
-                        val avatarUrl = remember(username) {
-                            username?.let { "https://avatar-redcircle.trakt.tv/$it.png" }
-                        }
                         Box(
                             modifier = Modifier
                                 .size(64.dp)
@@ -2796,9 +2794,9 @@ private fun TraktContent(
                                 .border(2.dp, PrimaryRed, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (avatarUrl != null) {
+                            if (!userAvatarUrl.isNullOrBlank()) {
                                 AsyncImage(
-                                    model = avatarUrl,
+                                    model = userAvatarUrl,
                                     contentDescription = "Trakt Profile",
                                     modifier = Modifier
                                         .size(64.dp)

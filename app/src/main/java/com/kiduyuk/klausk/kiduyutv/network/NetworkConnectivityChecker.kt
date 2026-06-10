@@ -246,7 +246,7 @@ object NetworkConnectivityChecker {
                 )
                 
                 if (!hasInternet) {
-                    Log.i(TAG, "Network has no INTERNET capability")
+                    //Log.i(TAG, "Network has no INTERNET capability")
                     return@withContext NetworkState.ConnectedNoInternet
                 }
                 
@@ -254,14 +254,14 @@ object NetworkConnectivityChecker {
                 val isReachable = testInternetReachability()
                 
                 if (isReachable) {
-                    Log.i(TAG, "Internet is reachable")
+                    //Log.i(TAG, "Internet is reachable")
                     NetworkState.Connected
                 } else {
-                    Log.i(TAG, "Network active but internet not reachable")
+                    //Log.i(TAG, "Network active but internet not reachable")
                     NetworkState.ConnectedNoInternet
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error checking connectivity: ${e.message}")
+                //Log.e(TAG, "Error checking connectivity: ${e.message}")
                 NetworkState.Unknown
             }
         }
@@ -294,7 +294,7 @@ object NetworkConnectivityChecker {
         return try {
             val address = InetAddress.getByName(host)
             val reachable = address.isReachable(REACHABILITY_TIMEOUT.toInt())
-            Log.i(TAG, "Host $host reachable: $reachable")
+            //Log.i(TAG, "Host $host reachable: $reachable")
             reachable
         } catch (e: Exception) {
             Log.w(TAG, "Error checking host $host: ${e.message}")
@@ -361,7 +361,7 @@ object NetworkConnectivityChecker {
                 false
             }
             
-            Log.i(TAG, "DNS servers detected: $dnsServers, Is custom: $isCustomDns")
+            //Log.i(TAG, "DNS servers detected: $dnsServers, Is custom: $isCustomDns")
             Pair(isCustomDns, dnsServers)
         } catch (e: Exception) {
             Log.e(TAG, "Error detecting DNS servers: ${e.message}")
@@ -414,7 +414,7 @@ object NetworkConnectivityChecker {
                 }
             }
             
-            Log.i(TAG, "VPN active: $vpnActive, interface: $vpnInterface")
+            //Log.i(TAG, "VPN active: $vpnActive, interface: $vpnInterface")
             Pair(vpnActive, vpnInterface)
         } catch (e: Exception) {
             Log.e(TAG, "Error detecting VPN: ${e.message}")
@@ -434,10 +434,10 @@ object NetworkConnectivityChecker {
             val isBehindProxy = !proxyHost.isNullOrEmpty() && proxyPort != null && proxyPort > 0
             
             if (isBehindProxy) {
-                Log.i(TAG, "Proxy detected: $proxyHost:$proxyPort")
+                //Log.i(TAG, "Proxy detected: $proxyHost:$proxyPort")
                 Pair(true, "$proxyHost:$proxyPort")
             } else {
-                Log.i(TAG, "No proxy detected")
+                //Log.i(TAG, "No proxy detected")
                 Pair(false, null)
             }
         } catch (e: Exception) {
@@ -511,12 +511,12 @@ object NetworkConnectivityChecker {
                 
                 _networkDiagnostics.value = diagnostics
                 
-                Log.i(TAG, "Network Diagnostics:")
-                Log.i(TAG, "  - Network Type: $networkType")
-                Log.i(TAG, "  - Custom DNS: $isCustomDns (Servers: $dnsServers)")
-                Log.i(TAG, "  - VPN Active: $isVpn (Interface: $vpnInterface)")
-                Log.i(TAG, "  - Proxy: $isProxy (Info: $proxyInfo)")
-                Log.i(TAG, "  - Metered: $isMetered")
+//                Log.i(TAG, "Network Diagnostics:")
+//                Log.i(TAG, "  - Network Type: $networkType")
+//                Log.i(TAG, "  - Custom DNS: $isCustomDns (Servers: $dnsServers)")
+//                Log.i(TAG, "  - VPN Active: $isVpn (Interface: $vpnInterface)")
+//                Log.i(TAG, "  - Proxy: $isProxy (Info: $proxyInfo)")
+//                Log.i(TAG, "  - Metered: $isMetered")
                 
                 // Check if DNS, VPN, or Proxy is detected and show warning dialog
                 // Custom DNS always shows dialog (even without internet reachability)
@@ -527,7 +527,7 @@ object NetworkConnectivityChecker {
                         // Only show dialog if app is in foreground
                         if (isAppInForeground()) {
                             try {
-                                Log.i(TAG, "DNS/VPN/Proxy detected, showing warning dialog")
+                                //Log.i(TAG, "DNS/VPN/Proxy detected, showing warning dialog")
                                 NetworkStateDialog.showDnsVpnDetectedDialog(AndroidApp.instance, diagnostics)
                             } catch (e: Exception) {
                                 Log.w(TAG, "Error showing DNS/VPN dialog: ${e.message}")
@@ -566,7 +566,7 @@ object NetworkConnectivityChecker {
     private fun updateState(state: NetworkState) {
         val currentState = _networkState.value
         if (currentState != state) {
-            Log.i(TAG, "State changed: $currentState → $state")
+            //Log.i(TAG, "State changed: $currentState → $state")
             _networkState.value = state
         }
     }

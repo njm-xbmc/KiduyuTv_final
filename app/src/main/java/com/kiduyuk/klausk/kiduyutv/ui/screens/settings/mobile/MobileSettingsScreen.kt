@@ -1127,6 +1127,7 @@ private fun TraktSettingsItem(
     val traktAuthManager = remember(context) { TraktAuthManager.getInstance(context) }
     val isConnected by traktAuthManager.isTraktAuthenticated.collectAsState()
     val username by traktAuthManager.userName.collectAsState()
+    val userAvatarUrl by traktAuthManager.userAvatarUrl.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -1161,12 +1162,23 @@ private fun TraktSettingsItem(
                     .background(SurfaceDark),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Default.Sync,
-                    contentDescription = null,
-                    tint = if (isConnected) Color(0xFF4CAF50) else TextSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
+                if (isConnected && !userAvatarUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = userAvatarUrl,
+                        contentDescription = "Trakt Avatar",
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = if (isConnected) Color(0xFF4CAF50) else TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -1214,12 +1226,9 @@ private fun TraktSettingsItem(
                         .background(SurfaceDark),
                     contentAlignment = Alignment.Center
                 ) {
-                    val avatarUrl = remember(username) {
-                        username?.let { "https://avatar-redcircle.trakt.tv/$it.png" }
-                    }
-                    if (avatarUrl != null) {
+                    if (!userAvatarUrl.isNullOrBlank()) {
                         AsyncImage(
-                            model = avatarUrl,
+                            model = userAvatarUrl,
                             contentDescription = "Trakt Avatar",
                             modifier = Modifier
                                 .size(40.dp)

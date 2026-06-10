@@ -59,6 +59,9 @@ object TraktAuthManager {
     private val _userName = MutableStateFlow<String?>(null)
     val userName: StateFlow<String?> = _userName
 
+    private val _userAvatarUrl = MutableStateFlow<String?>(null)
+    val userAvatarUrl: StateFlow<String?> = _userAvatarUrl
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
@@ -89,6 +92,7 @@ object TraktAuthManager {
     private const val PREF_REFRESH_TOKEN = "refresh_token"
     private const val PREF_EXPIRES_AT    = "expires_at"
     private const val PREF_USER_NAME     = "user_name"
+    private const val PREF_USER_AVATAR   = "user_avatar"
 
     /**
      * Non-nullable after [init] is called. Accessing any token method before
@@ -129,12 +133,14 @@ object TraktAuthManager {
         val storedRefresh = prefs.getString(PREF_REFRESH_TOKEN, null)
         val expiresAt     = prefs.getLong(PREF_EXPIRES_AT, 0L)
         val storedUser    = prefs.getString(PREF_USER_NAME,     null)
+        val storedAvatar  = prefs.getString(PREF_USER_AVATAR,   null)
 
         when {
             storedAccess != null && System.currentTimeMillis() < expiresAt -> {
                 _accessToken.value          = storedAccess
                 _refreshToken.value         = storedRefresh
                 _userName.value             = storedUser
+                _userAvatarUrl.value        = storedAvatar
                 _isTraktAuthenticated.value = true
                 Log.i(TAG, "Trakt tokens loaded from storage")
             }
@@ -142,6 +148,7 @@ object TraktAuthManager {
                 // Token exists but has expired — refresh in the background.
                 _refreshToken.value = storedRefresh
                 _userName.value     = storedUser
+                _userAvatarUrl.value = storedAvatar
                 Log.i(TAG, "Access token expired; refreshing in background")
                 scope.launch { refreshAccessToken() }
             }
@@ -160,18 +167,26 @@ object TraktAuthManager {
         refreshToken: String,
         expiresIn: Int,
         userName: String?,
+        userAvatar: String? = null,
     ) {
         prefs.edit()
             .putString(PREF_ACCESS_TOKEN,  accessToken)
             .putString(PREF_REFRESH_TOKEN, refreshToken)
             .putLong(PREF_EXPIRES_AT, System.currentTimeMillis() + expiresIn * 1_000L)
             .putString(PREF_USER_NAME, userName)
+            .putString(PREF_USER_AVATAR, userAvatar)
             .apply()
 
         _accessToken.value          = accessToken
         _refreshToken.value         = refreshToken
         _userName.value             = userName
+        _userAvatarUrl.value        = userAvatar
         _isTraktAuthenticated.value = true
+
+        // If we don't have an avatar, try to fetch it
+        if (userAvatar == null && accessToken.isNotEmpty()) {
+            scope.launch { fetchUserSettings() }
+        }
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -331,8 +346,50 @@ object TraktAuthManager {
         _accessToken.value          = null
         _refreshToken.value         = null
         _userName.value             = null
+        _userAvatarUrl.value        = null
         _isTraktAuthenticated.value = false
         Log.i(TAG, "Trakt tokens cleared")
+    }
+
+    /**
+     * Fetches user settings (including avatar) from Trakt API.
+     */
+    suspend fun fetchUserSettings() {
+        val token = getValidAccessToken() ?: return
+        try {
+            val request = Request.Builder()
+                .url("https://api.trakt.tv/users/settings")
+                .header("Authorization", "Bearer $token")
+                .header("trakt-api-version", "2")
+                .header("trakt-api-key", TRAKT_CLIENT_ID)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                val json = JSONObject(responseBody)
+                val userJson = json.optJSONObject("user")
+                val username = userJson?.optString("username")
+                val imagesJson = userJson?.optJSONObject("images")
+                val avatar = imagesJson?.optJSONObject("avatar")?.optString("full")
+
+                if (username != null || avatar != null) {
+                    prefs.edit().apply {
+                        if (username != null) {
+                            putString(PREF_USER_NAME, username)
+                            _userName.value = username
+                        }
+                        if (avatar != null) {
+                            putString(PREF_USER_AVATAR, avatar)
+                            _userAvatarUrl.value = avatar
+                        }
+                    }.apply()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch user settings: ${e.message}")
+        }
     }
 
     /** Alias for [clearTokens] kept for call-site compatibility. */
