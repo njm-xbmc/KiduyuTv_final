@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.kiduyuk.klausk.kiduyutv.data.api.ApiClient
+import com.kiduyuk.klausk.kiduyutv.data.api.TmdbApiService
 import com.kiduyuk.klausk.kiduyutv.data.model.Movie
 import com.kiduyuk.klausk.kiduyutv.data.model.TvShow
 import com.kiduyuk.klausk.kiduyutv.data.model.CastMember
@@ -40,11 +41,9 @@ import com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager
 import com.kiduyuk.klausk.kiduyutv.viewmodel.HomeViewModel
 import com.kiduyuk.klausk.kiduyutv.viewmodel.MyListItem
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 /**
  * Composable function for the "My List" screen, displaying items saved by the user.
@@ -97,52 +96,50 @@ fun MyListScreen(
                     onSuccess = { history ->
                         _traktWatchHistory.value = history
                         // Load poster paths asynchronously
-                        viewModelScope.launch {
-                            val items = mutableListOf<MyListItem>()
-                            history.forEach { item ->
-                                when (item.type) {
-                                    "movies" -> item.movie?.ids?.tmdb?.let { tmdbId ->
-                                        val cacheKey = "movie-$tmdbId"
-                                        val posterPath = posterCache.getOrPut(cacheKey) {
-                                            try {
-                                                tmdbApiService.getMovieDetail(tmdbId).posterPath
-                                            } catch (e: Exception) {
-                                                null
-                                            }
+                        val items = mutableListOf<MyListItem>()
+                        history.forEach { item ->
+                            when (item.type) {
+                                "movies" -> item.movie?.ids?.tmdb?.let { tmdbId ->
+                                    val cacheKey = "movie-$tmdbId"
+                                    val posterPath = posterCache.getOrPut(cacheKey) {
+                                        try {
+                                            tmdbApiService.getMovieDetail(tmdbId).posterPath
+                                        } catch (e: Exception) {
+                                            null
                                         }
-                                        items.add(
-                                            MyListItem(
-                                                id = tmdbId,
-                                                title = item.movie?.title ?: "Unknown",
-                                                posterPath = posterPath,
-                                                type = "movie",
-                                                voteAverage = item.movie?.rating ?: 0.0
-                                            )
-                                        )
                                     }
-                                    "shows" -> item.show?.ids?.tmdb?.let { tmdbId ->
-                                        val cacheKey = "tv-$tmdbId"
-                                        val posterPath = posterCache.getOrPut(cacheKey) {
-                                            try {
-                                                tmdbApiService.getTvShowDetail(tmdbId).posterPath
-                                            } catch (e: Exception) {
-                                                null
-                                            }
+                                    items.add(
+                                        MyListItem(
+                                            id = tmdbId,
+                                            title = item.movie?.title ?: "Unknown",
+                                            posterPath = posterPath,
+                                            type = "movie",
+                                            voteAverage = item.movie?.rating ?: 0.0
+                                        )
+                                    )
+                                }
+                                "shows" -> item.show?.ids?.tmdb?.let { tmdbId ->
+                                    val cacheKey = "tv-$tmdbId"
+                                    val posterPath = posterCache.getOrPut(cacheKey) {
+                                        try {
+                                            tmdbApiService.getTvShowDetail(tmdbId).posterPath
+                                        } catch (e: Exception) {
+                                            null
                                         }
-                                        items.add(
-                                            MyListItem(
-                                                id = tmdbId,
-                                                title = item.show?.title ?: "Unknown",
-                                                posterPath = posterPath,
-                                                type = "tv",
-                                                voteAverage = item.show?.rating ?: 0.0
-                                            )
-                                        )
                                     }
+                                    items.add(
+                                        MyListItem(
+                                            id = tmdbId,
+                                            title = item.show?.title ?: "Unknown",
+                                            posterPath = posterPath,
+                                            type = "tv",
+                                            voteAverage = item.show?.rating ?: 0.0
+                                        )
+                                    )
                                 }
                             }
-                            _watchedItems.value = items.distinctBy { "${it.type}-${it.id}" }
                         }
+                        _watchedItems.value = items.distinctBy { "${it.type}-${it.id}" }
                     },
                     onFailure = {
                         // Handle error silently - watched tab will show empty state
