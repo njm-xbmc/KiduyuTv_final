@@ -61,11 +61,11 @@ fun TraktProfileScreen(
 ) {
     val context = LocalContext.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Profile", "Collection", "Watchlist", "Recommended")
+    val tabs = listOf("Collection", "Watchlist", "Recommended")
 
-    var isLoading by remember { mutableStateOf(true) }
+    var isLoadingProfile by remember { mutableStateOf(true) }
     var profile by remember { mutableStateOf<TraktUser?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var profileError by remember { mutableStateOf<String?>(null) }
 
     val traktRepository = remember {
         TraktRepository(TraktApiClient.apiService, TraktAuthManager)
@@ -73,17 +73,17 @@ fun TraktProfileScreen(
 
     // Fetch profile on load
     LaunchedEffect(Unit) {
-        isLoading = true
-        error = null
+        isLoadingProfile = true
+        profileError = null
         traktRepository.getUserSettings().collect { result ->
             result.fold(
                 onSuccess = { settings ->
                     profile = settings.user
-                    isLoading = false
+                    isLoadingProfile = false
                 },
                 onFailure = { e ->
-                    error = e.message ?: "Failed to load profile"
-                    isLoading = false
+                    profileError = e.message ?: "Failed to load profile"
+                    isLoadingProfile = false
                 }
             )
         }
@@ -131,7 +131,65 @@ fun TraktProfileScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Profile Info Header (Avatar and Username)
+        if (profile != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                val avatarUrl = remember(profile!!.username) {
+                    "https://avatar-redcircle.trakt.tv/${profile!!.username}.png"
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(CardDark)
+                        .border(2.dp, PrimaryRed, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = "Profile Avatar",
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = profile!!.username,
+                        color = TextPrimary,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (!profile!!.name.isNullOrBlank()) {
+                        Text(
+                            text = profile!!.name!!,
+                            color = TextSecondary,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        } else if (isLoadingProfile) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(40.dp), color = PrimaryRed)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(text = "Loading profile...", color = TextSecondary)
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
 
         // Content Container
         Column(
@@ -176,26 +234,19 @@ fun TraktProfileScreen(
             // Tab Content
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTabIndex) {
-                    0 -> {
-                        when {
-                            isLoading -> LoadingIndicator("Loading profile...")
-                            error != null -> ErrorMessage(error!!, onBackClick)
-                            profile != null -> TraktProfileContent(profile = profile!!)
-                        }
-                    }
-                    1 -> TraktMediaTabContent(
+                    0 -> TraktMediaTabContent(
                         traktRepository = traktRepository,
                         tabType = "collection",
                         onMovieClick = onMovieClick,
                         onTvShowClick = onTvShowClick
                     )
-                    2 -> TraktMediaTabContent(
+                    1 -> TraktMediaTabContent(
                         traktRepository = traktRepository,
                         tabType = "watchlist",
                         onMovieClick = onMovieClick,
                         onTvShowClick = onTvShowClick
                     )
-                    3 -> TraktMediaTabContent(
+                    2 -> TraktMediaTabContent(
                         traktRepository = traktRepository,
                         tabType = "recommendations",
                         onMovieClick = onMovieClick,
@@ -338,23 +389,41 @@ private fun TraktMediaTabContent(
 
             mediaItems = results.toList()
             
-            // Background loading for posters
+            // Background loading for posters and ratings
             withContext(Dispatchers.IO) {
                 mediaItems.forEachIndexed { index, item ->
                     val key = "${item.type}-${item.id}"
-                    val path = posterCache[key] ?: try {
-                        if (item.type == "movie") {
-                            tmdbApiService.getMovieDetail(item.id).posterPath
-                        } else {
-                            tmdbApiService.getTvShowDetail(item.id).posterPath
+                    val cachedPath = posterCache[key]
+                    val needsPoster = item.posterPath == null && cachedPath == null
+                    val needsRating = item.voteAverage == 0.0
+
+                    if (needsPoster || needsRating) {
+                        try {
+                            val (path, rating) = if (item.type == "movie") {
+                                val detail = tmdbApiService.getMovieDetail(item.id)
+                                detail.posterPath to detail.voteAverage
+                            } else {
+                                val detail = tmdbApiService.getTvShowDetail(item.id)
+                                detail.posterPath to detail.voteAverage
+                            }
+
+                            withContext(Dispatchers.Main) {
+                                if (path != null) posterCache[key] = path
+                                mediaItems = mediaItems.toMutableList().apply {
+                                    this[index] = this[index].copy(
+                                        posterPath = path ?: cachedPath,
+                                        voteAverage = if (needsRating) rating else item.voteAverage
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("TraktProfileScreen", "Failed to fetch TMDB details for ${item.type}-${item.id}: ${e.message}")
                         }
-                    } catch (e: Exception) { null }
-                    
-                    if (path != null) {
-                        posterCache[key] = path
+                    } else if (item.posterPath == null && cachedPath != null) {
+                        // Use cached poster if available
                         withContext(Dispatchers.Main) {
                             mediaItems = mediaItems.toMutableList().apply {
-                                this[index] = this[index].copy(posterPath = path)
+                                this[index] = this[index].copy(posterPath = cachedPath)
                             }
                         }
                     }
@@ -458,193 +527,6 @@ private fun TraktMediaGrid(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun TraktProfileContent(
-    profile: TraktUser
-) {
-    val username = profile.username
-    val avatarUrl = remember(username) {
-        "https://avatar-redcircle.trakt.tv/$username.png"
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Profile Avatar
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
-                .background(CardDark)
-                .border(3.dp, PrimaryRed, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            AsyncImage(
-                model = avatarUrl,
-                contentDescription = "Profile Avatar",
-                modifier = Modifier
-                    .size(120.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Username
-        Text(
-            text = profile.username,
-            color = TextPrimary,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        // Display Name
-        if (!profile.name.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = profile.name,
-                color = TextSecondary,
-                fontSize = 18.sp
-            )
-        }
-
-        // VIP Badge
-        if (profile.vip) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFFFFD700).copy(alpha = 0.15f))
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = Color(0xFFFFD700),
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = "VIP Member",
-                    color = Color(0xFFFFD700),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Info Cards
-        Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            // About
-            if (!profile.about.isNullOrBlank()) {
-                ProfileInfoCard(
-                    title = "About",
-                    content = profile.about
-                )
-            }
-
-            // Location
-            if (!profile.location.isNullOrBlank()) {
-                ProfileInfoRow(
-                    icon = null,
-                    label = "Location",
-                    value = profile.location
-                )
-            }
-
-            // Joined Date
-            if (!profile.joinedAt.isNullOrBlank()) {
-                ProfileInfoRow(
-                    icon = Icons.Default.CheckCircle,
-                    label = "Member Since",
-                    value = formatTraktDate(profile.joinedAt)
-                )
-            }
-
-            // Gender
-            if (!profile.gender.isNullOrBlank()) {
-                ProfileInfoRow(
-                    icon = null,
-                    label = "Gender",
-                    value = profile.gender.replaceFirstChar { it.uppercase() }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-    }
-}
-
-@Composable
-private fun ProfileInfoCard(
-    title: String,
-    content: String
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(CardDark)
-            .padding(20.dp)
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = title,
-                color = TextSecondary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = content,
-                color = TextPrimary,
-                fontSize = 16.sp,
-                lineHeight = 24.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProfileInfoRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector?,
-    label: String,
-    value: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(CardDark)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            color = TextSecondary,
-            fontSize = 14.sp
-        )
-        Text(
-            text = value,
-            color = TextPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
     }
 }
 
