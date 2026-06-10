@@ -20,6 +20,7 @@ import androidx.navigation.navArgument
 import com.kiduyuk.klausk.kiduyutv.ui.screens.company_network_list.tv.MediaListScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.search.tv.SearchScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.settings.tv.SettingsScreen
+import com.kiduyuk.klausk.kiduyutv.ui.screens.settings.tv.TraktProfileScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.detail.tv.MovieDetailScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.detail.tv.SeasonEpisodesScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.detail.tv.StreamLinksScreen
@@ -398,6 +399,14 @@ fun NavGraph(navController: NavHostController) {
         // Settings Screen: Screen for app settings, information, and version details.
         composable(Screen.Settings.route) {
             SettingsScreen(
+                onBackClick = { navController.popBackStack() },
+                onNavigateToTraktProfile = { navController.navigate(Screen.TraktProfile.route) }
+            )
+        }
+
+        // Trakt Profile Screen
+        composable(Screen.TraktProfile.route) {
+            TraktProfileScreen(
                 onBackClick = { navController.popBackStack() }
             )
         }

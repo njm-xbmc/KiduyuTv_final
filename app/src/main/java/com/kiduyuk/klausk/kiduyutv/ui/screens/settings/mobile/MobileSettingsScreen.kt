@@ -65,6 +65,7 @@ import kotlinx.coroutines.launch
 fun MobileSettingsScreen(
     onBackClick: () -> Unit,
     onMyListClick: () -> Unit = {},
+    onNavigateToTraktProfile: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -374,7 +375,8 @@ fun MobileSettingsScreen(
                     },
                     onSignOut = {
                         TraktAuthManager.getInstance(context).signOut()
-                    }
+                    },
+                    onViewProfile = onNavigateToTraktProfile
                 )
             }
 
@@ -1119,35 +1121,36 @@ private fun TraktSettingsItem(
     onSignedIn: @Composable (String) -> String,
     onSignedOut: @Composable () -> String,
     onSignIn: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onViewProfile: () -> Unit
 ) {
     val traktAuthManager = remember(context) { TraktAuthManager.getInstance(context) }
     val isConnected by traktAuthManager.isTraktAuthenticated.collectAsState()
     val username by traktAuthManager.userName.collectAsState()
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                if (isConnected) {
-                    QuitDialog(
-                        context = context,
-                        title = "Disconnect Trakt.tv?",
-                        message = "Are you sure you want to disconnect your Trakt.tv account?",
-                        positiveButtonText = "Disconnect",
-                        negativeButtonText = "Cancel",
-                        lottieAnimRes = R.raw.exit,
-                        onNo = {},
-                        onYes = { onSignOut() }
-                    ).show()
-                } else {
-                    onSignIn()
-                }
-            }
+        modifier = Modifier.fillMaxWidth()
     ) {
+        // Main Trakt.tv row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable {
+                    if (isConnected) {
+                        QuitDialog(
+                            context = context,
+                            title = "Disconnect Trakt.tv?",
+                            message = "Are you sure you want to disconnect your Trakt.tv account?",
+                            positiveButtonText = "Disconnect",
+                            negativeButtonText = "Cancel",
+                            lottieAnimRes = R.raw.exit,
+                            onNo = {},
+                            onYes = { onSignOut() }
+                        ).show()
+                    } else {
+                        onSignIn()
+                    }
+                }
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1189,6 +1192,70 @@ private fun TraktSettingsItem(
                 tint = TextSecondary,
                 modifier = Modifier.size(20.dp)
             )
+        }
+
+        // View Profile option (only when connected)
+        if (isConnected) {
+            HorizontalDivider(
+                color = TextTertiary.copy(alpha = 0.1f),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onViewProfile() }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(SurfaceDark),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val avatarUrl = remember(username) {
+                        username?.let { "https://avatar-redcircle.trakt.tv/$it.png" }
+                    }
+                    if (avatarUrl != null) {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = "Trakt Avatar",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "View Profile",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "See your Trakt profile details",
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

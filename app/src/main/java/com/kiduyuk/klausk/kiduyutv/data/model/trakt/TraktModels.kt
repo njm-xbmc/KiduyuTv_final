@@ -14,7 +14,8 @@ data class TraktUser(
     @SerializedName("location") val location: String?,
     @SerializedName("about") val about: String?,
     @SerializedName("gender") val gender: String?,
-    @SerializedName("age") val age: Int?
+    @SerializedName("age") val age: Int?,
+    @SerializedName("avatar_url") val avatarUrl: String?
 )
 
 /**

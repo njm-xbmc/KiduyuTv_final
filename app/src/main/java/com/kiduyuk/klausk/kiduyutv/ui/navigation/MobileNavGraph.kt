@@ -30,6 +30,7 @@ import com.kiduyuk.klausk.kiduyutv.ui.screens.home.mobile.MobileTvShowsScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.home.mobile.SeeAllScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.search.mobile.MobileSearchScreen
 import com.kiduyuk.klausk.kiduyutv.ui.screens.settings.mobile.MobileSettingsScreen
+import com.kiduyuk.klausk.kiduyutv.ui.screens.settings.tv.TraktProfileScreen
 
 @androidx.media3.common.util.UnstableApi
 @OptIn(UnstableApi::class)
@@ -104,7 +105,14 @@ fun MobileNavGraph(navController: NavHostController) {
         composable(Screen.Settings.route) {
             MobileSettingsScreen(
                 onBackClick = { navController.popBackStack() },
-                onMyListClick = { navController.navigate(Screen.MyList.route) }
+                onMyListClick = { navController.navigate(Screen.MyList.route) },
+                onNavigateToTraktProfile = { navController.navigate(Screen.TraktProfile.route) }
+            )
+        }
+
+        composable(Screen.TraktProfile.route) {
+            TraktProfileScreen(
+                onBackClick = { navController.popBackStack() }
             )
         }
 

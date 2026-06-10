@@ -94,10 +94,12 @@ import kotlinx.coroutines.delay
  * Features a left sidebar navigation with three sections and a main content area.
  *
  * @param onBackClick Callback when the back button is clicked.
+ * @param onNavigateToTraktProfile Callback to navigate to Trakt profile screen.
  */
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
+    onNavigateToTraktProfile: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel()
 ) {
     // Set initial section to ACCOUNT for focus management
@@ -353,7 +355,8 @@ fun SettingsScreen(
                         },
                         onSignOutClick = {
                             com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context).signOut()
-                        }
+                        },
+                        onViewProfileClick = onNavigateToTraktProfile
                     )
                 }
 
@@ -2741,7 +2744,8 @@ private fun PhoneLoginCodeDialog(
 private fun TraktContent(
     context: Context,
     onSignInClick: () -> Unit,
-    onSignOutClick: () -> Unit
+    onSignOutClick: () -> Unit,
+    onViewProfileClick: () -> Unit
 ) {
     val traktAuthManager = remember(context) {
         com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager.getInstance(context)
@@ -2779,41 +2783,74 @@ private fun TraktContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (isConnected) Color(0xFF1B5E20) else SurfaceDark),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = if (isConnected) Color(0xFF4CAF50) else TextSecondary,
-                            modifier = Modifier.size(32.dp)
-                        )
+                    if (isConnected) {
+                        // Show profile avatar when connected
+                        val avatarUrl = remember(username) {
+                            username?.let { "https://avatar-redcircle.trakt.tv/$it.png" }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceDark)
+                                .border(2.dp, PrimaryRed, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (avatarUrl != null) {
+                                AsyncImage(
+                                    model = avatarUrl,
+                                    contentDescription = "Trakt Profile",
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Text(
+                                    text = username?.firstOrNull()?.uppercase() ?: "?",
+                                    color = TextPrimary,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(SurfaceDark),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
                     }
 
                     Column {
-                        Text(
-                            text = if (isConnected) "Connected" else "Not Connected",
-                            color = TextPrimary,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
                         if (isConnected && !username.isNullOrBlank()) {
                             Text(
-                                text = "Username: $username",
-                                color = TextSecondary,
-                                fontSize = 14.sp
+                                text = username,
+                                color = TextPrimary,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
-                        } else if (isConnected) {
                             Text(
                                 text = "Connected to Trakt.tv",
-                                color = TextSecondary,
+                                color = Color(0xFF4CAF50),
                                 fontSize = 14.sp
                             )
                         } else {
+                            Text(
+                                text = "Not Connected",
+                                color = TextPrimary,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             Text(
                                 text = "Sign in to sync your watch history",
                                 color = TextSecondary,
@@ -2839,15 +2876,57 @@ private fun TraktContent(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Sign in/out button
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isConnected) Color(0xFFB71C1C) else PrimaryRed)
-                        .clickable {
-                            if (isConnected) {
+                // Action buttons
+                if (isConnected) {
+                    // View Profile button
+                    val viewProfileInteractionSource = remember { MutableInteractionSource() }
+                    val isViewProfileFocused by viewProfileInteractionSource.collectIsFocusedAsState()
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isViewProfileFocused) PrimaryRed.copy(alpha = 0.8f) else PrimaryRed)
+                            .border(
+                                width = if (isViewProfileFocused) 2.dp else 0.dp,
+                                color = if (isViewProfileFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable(
+                                interactionSource = viewProfileInteractionSource,
+                                indication = null,
+                                onClick = onViewProfileClick
+                            )
+                            .focusable(interactionSource = viewProfileInteractionSource),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "View Profile",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Disconnect button
+                    val disconnectInteractionSource = remember { MutableInteractionSource() }
+                    val isDisconnectFocused by disconnectInteractionSource.collectIsFocusedAsState()
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.Transparent)
+                            .border(
+                                width = 1.dp,
+                                color = if (isDisconnectFocused) Color(0xFFB71C1C) else TextTertiary.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable {
                                 QuitDialog(
                                     context = context,
                                     title = "Disconnect Trakt.tv?",
@@ -2858,19 +2937,48 @@ private fun TraktContent(
                                     onNo = {},
                                     onYes = { onSignOutClick() }
                                 ).show()
-                            } else {
-                                onSignInClick()
                             }
-                        }
-                        .focusable(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isConnected) "Disconnect" else "Connect with Trakt.tv",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                            .focusable(interactionSource = disconnectInteractionSource),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Disconnect",
+                            color = Color(0xFFB71C1C),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                } else {
+                    // Connect button
+                    val connectInteractionSource = remember { MutableInteractionSource() }
+                    val isConnectFocused by connectInteractionSource.collectIsFocusedAsState()
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isConnectFocused) PrimaryRed.copy(alpha = 0.8f) else PrimaryRed)
+                            .border(
+                                width = if (isConnectFocused) 2.dp else 0.dp,
+                                color = if (isConnectFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable(
+                                interactionSource = connectInteractionSource,
+                                indication = null,
+                                onClick = onSignInClick
+                            )
+                            .focusable(interactionSource = connectInteractionSource),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Connect with Trakt.tv",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

@@ -24,6 +24,7 @@ sealed class Screen(val route: String) {
         }
     }
     object Settings : Screen("settings")
+    object TraktProfile : Screen("trakt_profile")
     object MobileCastDetail : Screen("mobile_cast_detail/{castId}?castName={castName}&character={character}&profilePath={profilePath}&knownForDepartment={knownForDepartment}") {
         fun createRoute(
             castId: Int,

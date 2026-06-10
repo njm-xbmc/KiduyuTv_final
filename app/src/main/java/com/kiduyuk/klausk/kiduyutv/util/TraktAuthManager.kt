@@ -163,7 +163,11 @@ object TraktAuthManager {
         }
     }
 
-    private fun saveTokens(
+    /**
+     * Publicly exposes token saving for flows that handle the network response
+     * themselves (e.g., Device Code Flow in TraktAuthActivity).
+     */
+    fun saveTokens(
         accessToken: String,
         refreshToken: String,
         expiresIn: Int,
