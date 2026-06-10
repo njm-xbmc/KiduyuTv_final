@@ -1,5 +1,6 @@
 package com.kiduyuk.klausk.kiduyutv.ui.screens.home.tv
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -46,6 +48,78 @@ import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
+
+// ── SharedPreferences cache helpers ──────────────────────────────────────────
+
+private const val PREFS_NAME = "trakt_watched_cache"
+private const val KEY_WATCHED_ITEMS = "watched_items_json"
+private const val KEY_CACHE_TIMESTAMP = "cache_timestamp_ms"
+
+/**
+ * Serializable mirror of [MyListItem] used purely for JSON persistence.
+ * We keep it here so we don't need to annotate the ViewModel model class.
+ */
+@Serializable
+private data class CachedWatchedItem(
+    val id: Int,
+    val title: String,
+    val posterPath: String?,
+    val type: String,
+    val voteAverage: Double = 0.0
+)
+
+private val cacheJson = Json { ignoreUnknownKeys = true }
+
+/** Write the full watched list to SharedPreferences as JSON. */
+private fun saveWatchedCache(context: Context, items: List<MyListItem>) {
+    try {
+        val cached = items.map {
+            CachedWatchedItem(it.id, it.title, it.posterPath, it.type, it.voteAverage)
+        }
+        val json = cacheJson.encodeToString(cached)
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(KEY_WATCHED_ITEMS, json)
+            .putLong(KEY_CACHE_TIMESTAMP, System.currentTimeMillis())
+            .apply()
+        Log.i("MyListScreen", "Saved ${items.size} watched items to cache")
+    } catch (e: Exception) {
+        Log.e("MyListScreen", "Failed to save watched cache: ${e.message}")
+    }
+}
+
+/** Read the cached watched list from SharedPreferences. Returns null if empty or missing. */
+private fun loadWatchedCache(context: Context): List<MyListItem>? {
+    return try {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_WATCHED_ITEMS, null) ?: return null
+        val cached = cacheJson.decodeFromString<List<CachedWatchedItem>>(json)
+        if (cached.isEmpty()) null
+        else cached.map {
+            MyListItem(
+                id = it.id,
+                title = it.title,
+                posterPath = it.posterPath,
+                type = it.type,
+                voteAverage = it.voteAverage
+            )
+        }.also { Log.i("MyListScreen", "Loaded ${it.size} watched items from cache") }
+    } catch (e: Exception) {
+        Log.e("MyListScreen", "Failed to load watched cache: ${e.message}")
+        null
+    }
+}
+
+/** Clear the watched cache (e.g. on logout). */
+private fun clearWatchedCache(context: Context) {
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
+    Log.i("MyListScreen", "Watched cache cleared")
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 /**
  * Composable function for the "My List" screen, displaying items saved by the user.
@@ -71,6 +145,8 @@ fun MyListScreen(
     onCastClick: (CastMember) -> Unit = { _ -> },
     viewModel: HomeViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+
     // Collect My List from the global manager.
     val myList by MyListManager.myList.collectAsState()
 
@@ -85,133 +161,152 @@ fun MyListScreen(
     // Cache for TMDB poster paths to avoid duplicate API calls
     val posterCache = remember { mutableStateMapOf<String, String?>() }
 
-    // State for watched items with poster paths loaded
+    // State for watched items — pre-populated from SharedPreferences cache on first composition
     val _watchedItems = remember { MutableStateFlow<List<MyListItem>>(emptyList()) }
     val watchedList by _watchedItems.collectAsState()
 
-    // Loading state for Trakt history
-    val isLoadingTrakt by remember { mutableStateOf(false) }
+    // true  → spinner shown; false → grid (or empty state) shown
+    var isLoadingWatched by remember { mutableStateOf(false) }
 
     // Fetch Trakt watched history when connected
     LaunchedEffect(isTraktConnected) {
         Log.i("MyListScreen", "isTraktConnected: $isTraktConnected")
-        if (isTraktConnected) {
-            Log.i("MyListScreen", "Starting to fetch ALL Trakt watch history...")
-            launch(Dispatchers.IO) {
-                val allHistory = mutableListOf<TraktHistoryItem>()
-                var page = 1
-                val limit = 100
-                var hasMore = true
-                
-                while (hasMore) {
-                    try {
-                        // traktRepository.getTraktWatchHistory returns a Flow that emits a single Result
-                        traktRepository.getTraktWatchHistory(page = page, limit = limit).collect { result ->
-                            result.fold(
-                                onSuccess = { history ->
-                                    if (history.isEmpty()) {
+
+        if (!isTraktConnected) {
+            Log.i("MyListScreen", "Trakt not connected, clearing history")
+            _traktWatchHistory.value = emptyList()
+            _watchedItems.value = emptyList()
+            clearWatchedCache(context)
+            return@LaunchedEffect
+        }
+
+        // ── Step 1: Try the SharedPreferences cache first ─────────────────
+        val cached = loadWatchedCache(context)
+        if (cached != null) {
+            Log.i("MyListScreen", "Cache hit — displaying ${cached.size} items immediately")
+            _watchedItems.value = cached
+            // Show cached data right away; a background refresh is NOT triggered
+            // automatically here (only on explicit "Refresh" or next cold launch).
+            return@LaunchedEffect
+        }
+
+        // ── Step 2: No cache — fetch from Trakt + TMDB ────────────────────
+        Log.i("MyListScreen", "No cache found — fetching ALL Trakt watch history from network...")
+        isLoadingWatched = true
+
+        launch(Dispatchers.IO) {
+            val allHistory = mutableListOf<TraktHistoryItem>()
+            var page = 1
+            val limit = 100
+            var hasMore = true
+
+            while (hasMore) {
+                try {
+                    traktRepository.getTraktWatchHistory(page = page, limit = limit).collect { result ->
+                        result.fold(
+                            onSuccess = { history ->
+                                if (history.isEmpty()) {
+                                    hasMore = false
+                                } else {
+                                    allHistory.addAll(history)
+                                    Log.i("MyListScreen", "Fetched page $page, total items: ${allHistory.size}")
+                                    if (history.size < limit) {
                                         hasMore = false
                                     } else {
-                                        allHistory.addAll(history)
-                                        Log.i("MyListScreen", "Fetched page $page, total items: ${allHistory.size}")
-                                        if (history.size < limit) {
-                                            hasMore = false
-                                        } else {
-                                            page++
-                                        }
-                                        
-                                        // Update state progressively as items come in
-                                        _traktWatchHistory.value = allHistory.toList()
+                                        page++
                                     }
-                                },
-                                onFailure = { error ->
-                                    Log.e("MyListScreen", "History fetch FAILED at page $page: ${error.message}")
-                                    hasMore = false
+                                    _traktWatchHistory.value = allHistory.toList()
                                 }
+                            },
+                            onFailure = { error ->
+                                Log.e("MyListScreen", "History fetch FAILED at page $page: ${error.message}")
+                                hasMore = false
+                            }
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("MyListScreen", "Error during history pagination: ${e.message}")
+                    hasMore = false
+                }
+            }
+
+            Log.i("MyListScreen", "Finished fetching history - Total: ${allHistory.size} items")
+
+            // Build unique MyListItems with TMDB poster + rating lookups
+            val items = mutableListOf<MyListItem>()
+            val processedIds = mutableSetOf<String>()
+
+            allHistory.forEach { item ->
+                when (item.type) {
+                    "movie" -> item.movie?.ids?.tmdb?.let { tmdbId ->
+                        val cacheKey = "movie-$tmdbId"
+                        if (processedIds.add(cacheKey)) {
+                            var posterPath = posterCache[cacheKey]
+                            var rating = item.movie.rating ?: 0.0
+
+                            if (posterPath == null || rating == 0.0) {
+                                try {
+                                    val detail = tmdbApiService.getMovieDetail(tmdbId)
+                                    posterPath = detail.posterPath
+                                    posterCache[cacheKey] = posterPath
+                                    if (rating == 0.0) rating = detail.voteAverage
+                                } catch (e: Exception) {
+                                    Log.e("MyListScreen", "Failed to fetch movie details for TMDB $tmdbId: ${e.message}")
+                                }
+                            }
+
+                            items.add(
+                                MyListItem(
+                                    id = tmdbId,
+                                    title = item.movie.title,
+                                    posterPath = posterPath,
+                                    type = "movie",
+                                    voteAverage = rating
+                                )
                             )
                         }
-                    } catch (e: Exception) {
-                        Log.e("MyListScreen", "Error during history pagination: ${e.message}")
-                        hasMore = false
                     }
-                }
-
-                Log.i("MyListScreen", "Finished fetching history - Total: ${allHistory.size} items")
-                
-                // Process collected history into MyListItems
-                val items = mutableListOf<MyListItem>()
-                val processedIds = mutableSetOf<String>()
-                
-                allHistory.forEach { item ->
-                    when (item.type) {
-                        "movie" -> item.movie?.ids?.tmdb?.let { tmdbId ->
-                            val cacheKey = "movie-$tmdbId"
+                    "episode", "show" -> {
+                        val traktShow = item.show
+                        traktShow?.ids?.tmdb?.let { tmdbId ->
+                            val cacheKey = "tv-$tmdbId"
                             if (processedIds.add(cacheKey)) {
                                 var posterPath = posterCache[cacheKey]
-                                var rating = item.movie.rating ?: 0.0
-                                
+                                var rating = traktShow.rating ?: 0.0
+
                                 if (posterPath == null || rating == 0.0) {
                                     try {
-                                        val detail = tmdbApiService.getMovieDetail(tmdbId)
+                                        val detail = tmdbApiService.getTvShowDetail(tmdbId)
                                         posterPath = detail.posterPath
                                         posterCache[cacheKey] = posterPath
                                         if (rating == 0.0) rating = detail.voteAverage
                                     } catch (e: Exception) {
-                                        Log.e("MyListScreen", "Failed to fetch movie details for TMDB $tmdbId: ${e.message}")
+                                        Log.e("MyListScreen", "Failed to fetch TV details for TMDB $tmdbId: ${e.message}")
                                     }
                                 }
-                                
+
                                 items.add(
                                     MyListItem(
                                         id = tmdbId,
-                                        title = item.movie.title,
+                                        title = traktShow.title,
                                         posterPath = posterPath,
-                                        type = "movie",
+                                        type = "tv",
                                         voteAverage = rating
                                     )
                                 )
                             }
                         }
-                        "episode", "show"  -> {
-                            val traktShow = item.show
-                            traktShow?.ids?.tmdb?.let { tmdbId ->
-                                val cacheKey = "tv-$tmdbId"
-                                if (processedIds.add(cacheKey)) {
-                                    var posterPath = posterCache[cacheKey]
-                                    var rating = traktShow.rating ?: 0.0
-                                    
-                                    if (posterPath == null || rating == 0.0) {
-                                        try {
-                                            val detail = tmdbApiService.getTvShowDetail(tmdbId)
-                                            posterPath = detail.posterPath
-                                            posterCache[cacheKey] = posterPath
-                                            if (rating == 0.0) rating = detail.voteAverage
-                                        } catch (e: Exception) {
-                                            Log.e("MyListScreen", "Failed to fetch TV details for TMDB $tmdbId: ${e.message}")
-                                        }
-                                    }
-                                    
-                                    items.add(
-                                        MyListItem(
-                                            id = tmdbId,
-                                            title = traktShow.title,
-                                            posterPath = posterPath,
-                                            type = "tv",
-                                            voteAverage = rating
-                                        )
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
-                Log.i("MyListScreen", "Built ${items.size} unique watched items from full history")
-                _watchedItems.value = items
             }
-        } else {
-            Log.i("MyListScreen", "Trakt not connected, clearing history")
-            _traktWatchHistory.value = emptyList()
-            _watchedItems.value = emptyList()
+
+            Log.i("MyListScreen", "Built ${items.size} unique watched items from full history")
+
+            // Persist to SharedPreferences so next launch uses cache
+            saveWatchedCache(context, items)
+
+            _watchedItems.value = items
+            isLoadingWatched = false
         }
     }
 
@@ -225,13 +320,9 @@ fun MyListScreen(
     // Tab state - Watched tab is first if Trakt is connected
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val baseTabs = listOf("Movies", "TV Shows", "Companies", "Networks", "Cast")
-    val tabs = if (isTraktConnected) {
-        listOf("Watched") + baseTabs
-    } else {
-        baseTabs
-    }
+    val tabs = if (isTraktConnected) listOf("Watched") + baseTabs else baseTabs
 
-    // Get screen configuration to calculate responsive grid
+    // Responsive grid
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
     val horizontalPadding = 25.dp
@@ -242,30 +333,28 @@ fun MyListScreen(
     val calculatedCardWidth = (availableWidth - (spacing * (actualColumns - 1))) / actualColumns
     val calculatedCardHeight = calculatedCardWidth * 1.8f
 
+    // Whether the currently visible tab is the Watched tab
+    val isWatchedTabSelected = isTraktConnected && selectedTabIndex == 0
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark) // Set background color.
+            .background(BackgroundDark)
     ) {
-        // Top navigation bar for the My List screen.
         TopBar(
             selectedRoute = "my_list",
             onNavItemClick = { route -> onNavigate(route) },
             onSearchClick = onSearchClick,
             onSettingsClick = onSettingsClick,
             onNotificationClick = { id, type ->
-                if (type == "movie") {
-                    onMovieClick(id)
-                } else {
-                    onTvShowClick(id)
-                }
+                if (type == "movie") onMovieClick(id) else onTvShowClick(id)
             }
         )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = horizontalPadding) // Padding for the content area.
+                .padding(horizontal = horizontalPadding)
         ) {
             // Tab Row
             ScrollableTabRow(
@@ -296,13 +385,36 @@ fun MyListScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(15.dp)) // Vertical spacing.
+            Spacer(modifier = Modifier.height(15.dp))
 
-            // Content based on selected tab
+            // ── Watched tab: show spinner until loading is done ───────────
+            if (isWatchedTabSelected && isLoadingWatched) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp
+                        )
+                        Text(
+                            text = "Loading watched history…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    }
+                }
+                return@Column  // Don't render the grid while loading
+            }
+
+            // Current list for the selected tab
             val currentList = when {
-                isTraktConnected && selectedTabIndex == 0 -> watchedList
+                isWatchedTabSelected -> watchedList
                 else -> {
-                    // Adjust index if Trakt is connected (first tab is Watched)
                     val effectiveIndex = if (isTraktConnected) selectedTabIndex - 1 else selectedTabIndex
                     when (effectiveIndex) {
                         0 -> movies
@@ -321,7 +433,7 @@ fun MyListScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     val emptyMessage = when {
-                        isTraktConnected && selectedTabIndex == 0 -> "No watched history from Trakt yet."
+                        isWatchedTabSelected -> "No watched history from Trakt yet."
                         else -> "No ${tabs[selectedTabIndex]} saved yet."
                     }
                     Column(
@@ -334,67 +446,92 @@ fun MyListScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             color = TextSecondary
                         )
-                        if (isTraktConnected && selectedTabIndex == 0) {
+
+                        // Watched tab empty state: offer a manual refresh button
+                        if (isWatchedTabSelected) {
                             Spacer(modifier = Modifier.height(16.dp))
                             val coroutineScope = rememberCoroutineScope()
                             Button(
                                 onClick = {
-                                    // Trigger a manual refresh
+                                    // Wipe cache so the full fetch runs again
+                                    clearWatchedCache(context)
                                     _traktWatchHistory.value = emptyList()
                                     _watchedItems.value = emptyList()
-                                    coroutineScope.launch {
-                                        traktRepository.getTraktWatchHistory(page = 1, limit = 100).collect { result ->
-                                            result.fold(
-                                                onSuccess = { history ->
-                                                    _traktWatchHistory.value = history
-                                                    val items = mutableListOf<MyListItem>()
-                                                    val processedIds = mutableSetOf<String>()
-                                                    history.forEach { item ->
-                                                        when (item.type) {
-                                                            "movie" -> item.movie?.ids?.tmdb?.let { tmdbId ->
-                                                                val cacheKey = "movie-$tmdbId"
-                                                                if (processedIds.add(cacheKey)) {
-                                                                    var posterPath = posterCache[cacheKey]
-                                                                    var rating = item.movie.rating ?: 0.0
-                                                                    
-                                                                    if (posterPath == null || rating == 0.0) {
-                                                                        try {
-                                                                            val detail = tmdbApiService.getMovieDetail(tmdbId)
-                                                                            posterPath = detail.posterPath
-                                                                            posterCache[cacheKey] = posterPath
-                                                                            if (rating == 0.0) rating = detail.voteAverage
-                                                                        } catch (e: Exception) { }
-                                                                    }
-                                                                    items.add(MyListItem(id = tmdbId, title = item.movie.title, posterPath = posterPath, type = "movie", voteAverage = rating))
-                                                                }
+                                    isLoadingWatched = true
+
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val allHistory = mutableListOf<TraktHistoryItem>()
+                                        var page = 1
+                                        val limit = 100
+                                        var hasMore = true
+
+                                        while (hasMore) {
+                                            try {
+                                                traktRepository.getTraktWatchHistory(page = page, limit = limit).collect { result ->
+                                                    result.fold(
+                                                        onSuccess = { history ->
+                                                            if (history.isEmpty()) {
+                                                                hasMore = false
+                                                            } else {
+                                                                allHistory.addAll(history)
+                                                                if (history.size < limit) hasMore = false else page++
+                                                                _traktWatchHistory.value = allHistory.toList()
                                                             }
-                                                            "episode", "show" -> {
-                                                                val traktShow = item.show
-                                                                traktShow?.ids?.tmdb?.let { tmdbId ->
-                                                                    val cacheKey = "tv-$tmdbId"
-                                                                    if (processedIds.add(cacheKey)) {
-                                                                        var posterPath = posterCache[cacheKey]
-                                                                        var rating = traktShow.rating ?: 0.0
-                                                                        
-                                                                        if (posterPath == null || rating == 0.0) {
-                                                                            try {
-                                                                                val detail = tmdbApiService.getTvShowDetail(tmdbId)
-                                                                                posterPath = detail.posterPath
-                                                                                posterCache[cacheKey] = posterPath
-                                                                                if (rating == 0.0) rating = detail.voteAverage
-                                                                            } catch (e: Exception) { }
-                                                                        }
-                                                                        items.add(MyListItem(id = tmdbId, title = traktShow.title, posterPath = posterPath, type = "tv", voteAverage = rating))
-                                                                    }
-                                                                }
+                                                        },
+                                                        onFailure = { hasMore = false }
+                                                    )
+                                                }
+                                            } catch (e: Exception) {
+                                                hasMore = false
+                                            }
+                                        }
+
+                                        val items = mutableListOf<MyListItem>()
+                                        val processedIds = mutableSetOf<String>()
+
+                                        allHistory.forEach { item ->
+                                            when (item.type) {
+                                                "movie" -> item.movie?.ids?.tmdb?.let { tmdbId ->
+                                                    val cacheKey = "movie-$tmdbId"
+                                                    if (processedIds.add(cacheKey)) {
+                                                        var posterPath = posterCache[cacheKey]
+                                                        var rating = item.movie.rating ?: 0.0
+                                                        if (posterPath == null || rating == 0.0) {
+                                                            try {
+                                                                val detail = tmdbApiService.getMovieDetail(tmdbId)
+                                                                posterPath = detail.posterPath
+                                                                posterCache[cacheKey] = posterPath
+                                                                if (rating == 0.0) rating = detail.voteAverage
+                                                            } catch (e: Exception) { }
+                                                        }
+                                                        items.add(MyListItem(id = tmdbId, title = item.movie.title, posterPath = posterPath, type = "movie", voteAverage = rating))
+                                                    }
+                                                }
+                                                "episode", "show" -> {
+                                                    val traktShow = item.show
+                                                    traktShow?.ids?.tmdb?.let { tmdbId ->
+                                                        val cacheKey = "tv-$tmdbId"
+                                                        if (processedIds.add(cacheKey)) {
+                                                            var posterPath = posterCache[cacheKey]
+                                                            var rating = traktShow.rating ?: 0.0
+                                                            if (posterPath == null || rating == 0.0) {
+                                                                try {
+                                                                    val detail = tmdbApiService.getTvShowDetail(tmdbId)
+                                                                    posterPath = detail.posterPath
+                                                                    posterCache[cacheKey] = posterPath
+                                                                    if (rating == 0.0) rating = detail.voteAverage
+                                                                } catch (e: Exception) { }
                                                             }
+                                                            items.add(MyListItem(id = tmdbId, title = traktShow.title, posterPath = posterPath, type = "tv", voteAverage = rating))
                                                         }
                                                     }
-                                                    _watchedItems.value = items
-                                                },
-                                                onFailure = { }
-                                            )
+                                                }
+                                            }
                                         }
+
+                                        saveWatchedCache(context, items)
+                                        _watchedItems.value = items
+                                        isLoadingWatched = false
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -567,13 +704,10 @@ fun MyListScreen(
     }
 }
 
+// ── Private item card (used in preview) ──────────────────────────────────────
+
 /**
  * Composable function to display a single item in the "My List" screen.
- * It shows the item's title, type, and provides options to view details or remove it.
- *
- * @param item The [MyListItem] data to display.
- * @param onClick Lambda to be invoked when the card is clicked.
- * @param onRemove Lambda to be invoked when the remove button is clicked.
  */
 @Composable
 private fun MyListItemCard(
@@ -587,13 +721,12 @@ private fun MyListItemCard(
             .height(120.dp)
             .background(
                 color = CardDark,
-                shape = RoundedCornerShape(8.dp) // Rounded corners for the card background.
+                shape = RoundedCornerShape(8.dp)
             )
             .clickable { onClick() }
-            .padding(10.dp), // Padding inside the card.
-        horizontalArrangement = Arrangement.spacedBy(16.dp) // Spacing between elements in the row.
+            .padding(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Poster thumbnail.
         AsyncImage(
             model = "${TmdbApiService.IMAGE_BASE_URL}${TmdbApiService.POSTER_SIZE}${item.posterPath}",
             contentDescription = item.title,
@@ -601,46 +734,31 @@ private fun MyListItemCard(
             modifier = Modifier
                 .width(80.dp)
                 .height(88.dp)
-                .background(
-                    color = SurfaceDark,
-                    shape = RoundedCornerShape(4.dp)
-                )
+                .background(color = SurfaceDark, shape = RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
         )
 
-        // Column for item title and type.
         Column(
-            modifier = Modifier.weight(1f), // Takes available horizontal space.
-            verticalArrangement = Arrangement.Center // Center content vertically.
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary
             )
-            Spacer(modifier = Modifier.height(4.dp)) // Vertical spacing.
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = if (item.type == "movie") "Movie" else "TV Show",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary
             )
         }
-
-        // Remove button.
-//        IconButton(onClick = onRemove) {
-//            Icon(
-//                imageVector = Icons.Default.Close,
-//                contentDescription = "Remove from list",
-//                tint = TextPrimary
-//            )
-//        }
     }
 }
 
+// ── Preview ───────────────────────────────────────────────────────────────────
 
-/**
- * Preview for the [MyListScreen] composable.
- */
 @Preview(showBackground = true, backgroundColor = 0xFF141414)
 @Composable
 fun MyListScreenPreview() {
@@ -650,15 +768,6 @@ fun MyListScreenPreview() {
                 .fillMaxSize()
                 .background(BackgroundDark)
         ) {
-            // Header for the preview.
-//            Text(
-//                text = "My List",
-//                style = MaterialTheme.typography.headlineLarge,
-//                color = TextPrimary,
-//                modifier = Modifier.padding(48.dp)
-//            )
-
-            // Sample My List Items for the preview.
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 25.dp, vertical = 10.dp),

@@ -41,7 +41,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -180,8 +179,6 @@ class SplashActivity : ComponentActivity() {
         show()
     }
 
-
-
     override fun onDestroy() {
         super.onDestroy()
         activeDialogs.forEach { if (it.isShowing) it.dismiss() }
@@ -278,7 +275,7 @@ class SplashActivity : ComponentActivity() {
             return
         }
 
-         Log.i(TAG, "User logged in - starting Firebase data sync...")
+        Log.i(TAG, "User logged in - starting Firebase data sync...")
         val displayName = AuthManager.userDisplayName.value ?: "User"
         Toast.makeText(this, "Welcome back, $displayName!", Toast.LENGTH_SHORT).show()
         // Start sync and observe progress
@@ -322,9 +319,29 @@ class SplashActivity : ComponentActivity() {
 
     /**
      * Navigate to MainActivity and finish this splash screen.
+     * Guards against navigation while any blocking condition is still active:
+     * an update dialog is open, permissions haven't been resolved, or sync is
+     * still running.  The Compose layer also prevents onTimeout() from being
+     * called in those states, but this is a second safety net at the Activity
+     * level so that even a race-condition early call is silently dropped.
      */
     private fun navigateToMain() {
-        if (isFinishing) return // Prevent navigation if already finishing
+        if (isFinishing) return
+
+        // Guard: do not navigate while a dialog is open or conditions are unmet
+        if (updateAvailable) {
+            Log.i(TAG, "Update dialog still active — suppressing navigation")
+            return
+        }
+        if (!permissionHandled) {
+            Log.i(TAG, "Permission dialog still active — suppressing navigation")
+            return
+        }
+        if (!syncCompleted) {
+            Log.i(TAG, "Firebase sync still in progress — suppressing navigation")
+            return
+        }
+
         Log.i(TAG, "Navigating to MainActivity...")
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -607,6 +624,14 @@ class SplashActivity : ComponentActivity() {
             if (isPaused) {
                 barProgress.stop()
             } else {
+                // If the bar already completed while we were paused (e.g. the update
+                // dialog was open for a long time), do NOT call onTimeout() immediately.
+                // That would navigate to MainActivity before the dialog has fully
+                // dismissed.  Instead we bail out — the progress bar stays at 1f and
+                // the user sees the splash for a brief extra moment until the Activity-
+                // level guard in navigateToMain() is also clear.
+                if (barProgress.value >= 1f) return@LaunchedEffect
+
                 val remainingMs = ((1f - barProgress.value) * SPLASH_DURATION_MS)
                     .toInt().coerceAtLeast(100)
                 barProgress.animateTo(
@@ -806,4 +831,3 @@ class SplashActivity : ComponentActivity() {
         }
     }
 }
-

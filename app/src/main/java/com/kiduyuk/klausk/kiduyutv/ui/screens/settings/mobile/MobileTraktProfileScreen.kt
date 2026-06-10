@@ -114,21 +114,23 @@ fun MobileTraktProfileScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(horizontal = 8.dp)
+                .padding(bottom = innerPadding.calculateBottomPadding(), top = innerPadding.calculateTopPadding())
         ) {
             // Profile Header
             if (profile != null) {
                 MobileProfileHeader(profile = profile!!, avatarUrl = avatarUrl)
             } else if (isLoadingProfile) {
-                Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = PrimaryRed, modifier = Modifier.size(32.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = PrimaryRed, modifier = Modifier.size(24.dp))
                 }
             } else if (profileError != null) {
                 Text(
                     text = profileError!!,
                     color = Color.Red,
-                    modifier = Modifier.padding(16.dp),
-                    textAlign = TextAlign.Center
+                    modifier = Modifier.padding(12.dp),
+                    textAlign = TextAlign.Center,
+                    fontSize = 14.sp
                 )
             }
 
@@ -143,7 +145,8 @@ fun MobileTraktProfileScreen(
                         modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
                         color = PrimaryRed
                     )
-                }
+                },
+                modifier = Modifier.height(48.dp)
             ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -152,9 +155,10 @@ fun MobileTraktProfileScreen(
                         text = {
                             Text(
                                 text = title,
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
                                 fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Medium,
-                                color = if (selectedTabIndex == index) PrimaryRed else TextSecondary
+                                color = if (selectedTabIndex == index) PrimaryRed else TextSecondary,
+                                maxLines = 1
                             )
                         }
                     )
@@ -193,12 +197,12 @@ private fun MobileProfileHeader(profile: TraktUser, avatarUrl: String?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(72.dp)
+                .size(64.dp)
                 .clip(CircleShape)
                 .background(CardDark)
                 .border(2.dp, PrimaryRed, CircleShape),
@@ -208,19 +212,19 @@ private fun MobileProfileHeader(profile: TraktUser, avatarUrl: String?) {
                 model = avatarUrl,
                 contentDescription = "Profile Avatar",
                 modifier = Modifier
-                    .size(72.dp)
+                    .size(64.dp)
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
         }
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = profile.username,
                 color = TextPrimary,
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -229,25 +233,35 @@ private fun MobileProfileHeader(profile: TraktUser, avatarUrl: String?) {
                 Text(
                     text = profile.name!!,
                     color = TextSecondary,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            if (!profile.about.isNullOrBlank()) {
+                Text(
+                    text = profile.about!!,
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
             if (profile.vip) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = null,
                         tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "VIP Member",
+                        text = "VIP",
                         color = Color(0xFFFFD700),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }

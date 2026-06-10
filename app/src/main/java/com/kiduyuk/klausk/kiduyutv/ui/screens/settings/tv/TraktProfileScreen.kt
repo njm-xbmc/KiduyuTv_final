@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -104,24 +105,24 @@ fun TraktProfileScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
-            .padding(24.dp)
+            .padding(16.dp)
     ) {
         // Header
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             IconButton(
                 onClick = onBackClick,
                 modifier = Modifier
-                    .size(48.dp)
-                    .background(color = CardDark, shape = RoundedCornerShape(12.dp))
+                    .size(40.dp)
+                    .background(color = CardDark, shape = RoundedCornerShape(10.dp))
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = TextPrimary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
@@ -131,29 +132,29 @@ fun TraktProfileScreen(
                         color = PrimaryRed.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(20.dp)
                     )
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = "Trakt.tv",
                     color = PrimaryRed,
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Profile Info Header (Avatar and Username)
         if (profile != null) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(horizontal = 12.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .background(CardDark)
                         .border(2.dp, PrimaryRed, CircleShape),
@@ -163,48 +164,58 @@ fun TraktProfileScreen(
                         model = avatarUrl,
                         contentDescription = "Profile Avatar",
                         modifier = Modifier
-                            .size(80.dp)
+                            .size(64.dp)
                             .clip(CircleShape),
                         contentScale = ContentScale.Crop
                     )
                 }
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = profile!!.username,
                         color = TextPrimary,
-                        fontSize = 28.sp,
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold
                     )
                     if (!profile!!.name.isNullOrBlank()) {
                         Text(
                             text = profile!!.name!!,
                             color = TextSecondary,
-                            fontSize = 16.sp
+                            fontSize = 14.sp
+                        )
+                    }
+                    if (!profile!!.about.isNullOrBlank()) {
+                        Text(
+                            text = profile!!.about!!,
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         } else if (isLoadingProfile) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = 12.dp)
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(40.dp), color = PrimaryRed)
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(text = "Loading profile...", color = TextSecondary)
+                CircularProgressIndicator(modifier = Modifier.size(32.dp), color = PrimaryRed)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(text = "Loading profile...", color = TextSecondary, fontSize = 14.sp)
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         // Content Container
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(SurfaceDark)
-                .padding(32.dp)
+                .padding(12.dp)
         ) {
             // Tab Row
             ScrollableTabRow(
@@ -227,7 +238,7 @@ fun TraktProfileScreen(
                         text = {
                             Text(
                                 text = title,
-                                fontSize = 16.sp,
+                                fontSize = 14.sp,
                                 fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Medium,
                                 color = if (selectedTabIndex == index) PrimaryRed else TextSecondary
                             )
@@ -236,7 +247,7 @@ fun TraktProfileScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Tab Content
             Box(modifier = Modifier.weight(1f)) {
@@ -470,15 +481,15 @@ private fun TraktMediaGrid(
 ) {
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
-    val spacing = 16.dp
-    val columns = 6
-    val calculatedCardWidth = (screenWidth - 100.dp - (spacing * (columns - 1))) / columns
+    val spacing = 8.dp
+    val columns = 7
+    val calculatedCardWidth = (screenWidth - 64.dp - (spacing * (columns - 1))) / columns
     val calculatedCardHeight = calculatedCardWidth * 1.5f
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 32.dp),
+        contentPadding = PaddingValues(bottom = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(spacing),
         verticalArrangement = Arrangement.spacedBy(spacing)
     ) {

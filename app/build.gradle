@@ -4,6 +4,7 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
     id 'com.google.devtools.ksp'
     id 'com.google.gms.google-services'
+    id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
 android {
@@ -134,6 +135,12 @@ dependencies {
     // jetpack Security
     // ─────────────────────────────────────────────
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+
+    // ─────────────────────────────────────────────
+    // kotlinx-serialization
+    // ─────────────────────────────────────────────
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // ─────────────────────────────────────────────
     // Navigation

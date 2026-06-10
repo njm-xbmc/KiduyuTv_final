@@ -92,6 +92,10 @@ fun HomeScreen(
             .fillMaxSize()
             .background(BackgroundDark)
     ) {
+        TraktAnnouncementDialog(
+            onSettingsClick = onSettingsClick
+        )
+
         if (uiState.isLoading && uiState.trendingTvShows.isEmpty()) {
             LoadingContent()
         } else if (uiState.error != null && uiState.trendingTvShows.isEmpty()) {
