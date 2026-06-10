@@ -107,63 +107,67 @@ fun MyListScreen(
                         // Load poster paths asynchronously in a background scope
                         launch(Dispatchers.IO) {
                             val items = mutableListOf<MyListItem>()
-                            // Deduplicate history items by movie/show ID to avoid redundant work
-                            val processedIds = mutableSetOf<String>()
                             
                             history.forEach { item ->
                                 when (item.type) {
                                     "movie" -> item.movie?.ids?.tmdb?.let { tmdbId ->
-                                        val key = "movie-$tmdbId"
-                                        if (processedIds.add(key)) {
-                                            val posterPath = posterCache[key] ?: try {
+                                        val cacheKey = "movie-$tmdbId"
+                                        var posterPath = posterCache[cacheKey]
+                                        var rating = item.movie.rating ?: 0.0
+                                        
+                                        if (posterPath == null || rating == 0.0) {
+                                            try {
                                                 val detail = tmdbApiService.getMovieDetail(tmdbId)
-                                                posterCache[key] = detail.posterPath
-                                                detail.posterPath
+                                                posterPath = detail.posterPath
+                                                posterCache[cacheKey] = posterPath
+                                                if (rating == 0.0) rating = detail.voteAverage
                                             } catch (e: Exception) {
-                                                Log.e("MyListScreen", "Failed to fetch movie poster for TMDB $tmdbId: ${e.message}")
-                                                null
+                                                Log.e("MyListScreen", "Failed to fetch movie details for TMDB $tmdbId: ${e.message}")
+                                            }
+                                        }
+                                        
+                                        items.add(
+                                            MyListItem(
+                                                id = tmdbId,
+                                                title = item.movie.title,
+                                                posterPath = posterPath,
+                                                type = "movie",
+                                                voteAverage = rating
+                                            )
+                                        )
+                                    }
+                                    "episode", "show" -> {
+                                        val traktShow = item.show
+                                        traktShow?.ids?.tmdb?.let { tmdbId ->
+                                            val cacheKey = "tv-$tmdbId"
+                                            var posterPath = posterCache[cacheKey]
+                                            var rating = traktShow.rating ?: 0.0
+                                            
+                                            if (posterPath == null || rating == 0.0) {
+                                                try {
+                                                    val detail = tmdbApiService.getTvShowDetail(tmdbId)
+                                                    posterPath = detail.posterPath
+                                                    posterCache[cacheKey] = posterPath
+                                                    if (rating == 0.0) rating = detail.voteAverage
+                                                } catch (e: Exception) {
+                                                    Log.e("MyListScreen", "Failed to fetch TV details for TMDB $tmdbId: ${e.message}")
+                                                }
                                             }
                                             
                                             items.add(
                                                 MyListItem(
                                                     id = tmdbId,
-                                                    title = item.movie?.title ?: "Unknown",
+                                                    title = traktShow.title,
                                                     posterPath = posterPath,
-                                                    type = "movie",
-                                                    voteAverage = item.movie?.rating ?: 0.0
+                                                    type = "tv",
+                                                    voteAverage = rating
                                                 )
                                             )
                                         }
                                     }
-                                    "episode", "show" -> {
-                                        val traktShow = item.show ?: item.episode?.let { /* find show if needed */ null } 
-                                        traktShow?.ids?.tmdb?.let { tmdbId ->
-                                            val key = "tv-$tmdbId"
-                                            if (processedIds.add(key)) {
-                                                val posterPath = posterCache[key] ?: try {
-                                                    val detail = tmdbApiService.getTvShowDetail(tmdbId)
-                                                    posterCache[key] = detail.posterPath
-                                                    detail.posterPath
-                                                } catch (e: Exception) {
-                                                    Log.e("MyListScreen", "Failed to fetch TV poster for TMDB $tmdbId: ${e.message}")
-                                                    null
-                                                }
-                                                
-                                                items.add(
-                                                    MyListItem(
-                                                        id = tmdbId,
-                                                        title = traktShow.title,
-                                                        posterPath = posterPath,
-                                                        type = "tv",
-                                                        voteAverage = traktShow.rating ?: 0.0
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
                                 }
                             }
-                            Log.i("MyListScreen", "Built ${items.size} unique watched items")
+                            Log.i("MyListScreen", "Built ${items.size} watched items")
                             _watchedItems.value = items
                         }
                     },
@@ -312,30 +316,39 @@ fun MyListScreen(
                                                 onSuccess = { history ->
                                                     _traktWatchHistory.value = history
                                                     val items = mutableListOf<MyListItem>()
-                                                    val processedIds = mutableSetOf<String>()
                                                     history.forEach { item ->
                                                         when (item.type) {
                                                             "movie" -> item.movie?.ids?.tmdb?.let { tmdbId ->
-                                                                val key = "movie-$tmdbId"
-                                                                if (processedIds.add(key)) {
-                                                                    val posterPath = posterCache[key] ?: try {
-                                                                        tmdbApiService.getMovieDetail(tmdbId).posterPath
-                                                                    } catch (e: Exception) { null }
-                                                                    if (posterPath != null) posterCache[key] = posterPath
-                                                                    items.add(MyListItem(id = tmdbId, title = item.movie?.title ?: "Unknown", posterPath = posterPath, type = "movie", voteAverage = item.movie?.rating ?: 0.0))
+                                                                val cacheKey = "movie-$tmdbId"
+                                                                var posterPath = posterCache[cacheKey]
+                                                                var rating = item.movie.rating ?: 0.0
+                                                                
+                                                                if (posterPath == null || rating == 0.0) {
+                                                                    try {
+                                                                        val detail = tmdbApiService.getMovieDetail(tmdbId)
+                                                                        posterPath = detail.posterPath
+                                                                        posterCache[cacheKey] = posterPath
+                                                                        if (rating == 0.0) rating = detail.voteAverage
+                                                                    } catch (e: Exception) { }
                                                                 }
+                                                                items.add(MyListItem(id = tmdbId, title = item.movie.title, posterPath = posterPath, type = "movie", voteAverage = rating))
                                                             }
                                                             "episode", "show" -> {
                                                                 val traktShow = item.show
                                                                 traktShow?.ids?.tmdb?.let { tmdbId ->
-                                                                    val key = "tv-$tmdbId"
-                                                                    if (processedIds.add(key)) {
-                                                                        val posterPath = posterCache[key] ?: try {
-                                                                            tmdbApiService.getTvShowDetail(tmdbId).posterPath
-                                                                        } catch (e: Exception) { null }
-                                                                        if (posterPath != null) posterCache[key] = posterPath
-                                                                        items.add(MyListItem(id = tmdbId, title = traktShow.title, posterPath = posterPath, type = "tv", voteAverage = traktShow.rating ?: 0.0))
+                                                                    val cacheKey = "tv-$tmdbId"
+                                                                    var posterPath = posterCache[cacheKey]
+                                                                    var rating = traktShow.rating ?: 0.0
+                                                                    
+                                                                    if (posterPath == null || rating == 0.0) {
+                                                                        try {
+                                                                            val detail = tmdbApiService.getTvShowDetail(tmdbId)
+                                                                            posterPath = detail.posterPath
+                                                                            posterCache[cacheKey] = posterPath
+                                                                            if (rating == 0.0) rating = detail.voteAverage
+                                                                        } catch (e: Exception) { }
                                                                     }
+                                                                    items.add(MyListItem(id = tmdbId, title = traktShow.title, posterPath = posterPath, type = "tv", voteAverage = rating))
                                                                 }
                                                             }
                                                         }

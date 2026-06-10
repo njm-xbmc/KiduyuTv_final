@@ -1,6 +1,6 @@
 package com.kiduyuk.klausk.kiduyutv.ui.screens.settings.tv
 
-import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,6 +8,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,59 +21,71 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.kiduyuk.klausk.kiduyutv.data.api.ApiClient
+import com.kiduyuk.klausk.kiduyutv.data.model.Movie
+import com.kiduyuk.klausk.kiduyutv.data.model.TvShow
 import com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktUser
 import com.kiduyuk.klausk.kiduyutv.data.remote.TraktApiClient
+import com.kiduyuk.klausk.kiduyutv.data.repository.TraktRepository
+import com.kiduyuk.klausk.kiduyutv.ui.components.MovieCard
+import com.kiduyuk.klausk.kiduyutv.ui.components.TvShowCard
 import com.kiduyuk.klausk.kiduyutv.ui.theme.*
 import com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import com.kiduyuk.klausk.kiduyutv.viewmodel.MyListItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Trakt Profile Screen - displays user profile information from Trakt.tv
+ * Now with tabs for Collection, Watchlist and Recommendations.
  */
 @Composable
 fun TraktProfileScreen(
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onMovieClick: (Int) -> Unit = {},
+    onTvShowClick: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Profile", "Collection", "Watchlist", "Recommended")
 
     var isLoading by remember { mutableStateOf(true) }
     var profile by remember { mutableStateOf<TraktUser?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val traktRepository = remember {
+        TraktRepository(TraktApiClient.apiService, TraktAuthManager)
+    }
+
     // Fetch profile on load
     LaunchedEffect(Unit) {
         isLoading = true
         error = null
-        try {
-            val token = TraktAuthManager.getValidAccessToken()
-            if (token != null) {
-                val response = TraktApiClient.apiService.getUserProfile("Bearer $token")
-                if (response.isSuccessful) {
-                    profile = response.body()
-                } else {
-                    error = "Failed to load profile: ${response.code()}"
+        traktRepository.getUserSettings().collect { result ->
+            result.fold(
+                onSuccess = { settings ->
+                    profile = settings.user
+                    isLoading = false
+                },
+                onFailure = { e ->
+                    error = e.message ?: "Failed to load profile"
+                    isLoading = false
                 }
-            } else {
-                error = "Not authenticated with Trakt.tv"
-            }
-        } catch (e: Exception) {
-            error = "Error: ${e.message}"
-        } finally {
-            isLoading = false
+            )
         }
     }
 
@@ -108,7 +123,7 @@ fun TraktProfileScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "Trakt Profile",
+                    text = "Trakt.tv",
                     color = PrimaryRed,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
@@ -118,78 +133,73 @@ fun TraktProfileScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Content
-        Box(
+        // Content Container
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(24.dp))
                 .background(SurfaceDark)
                 .padding(32.dp)
         ) {
-            when {
-                isLoading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                color = PrimaryRed,
-                                strokeWidth = 3.dp
-                            )
-                            Text(
-                                text = "Loading profile...",
-                                color = TextSecondary,
-                                fontSize = 16.sp
-                            )
-                        }
-                    }
+            // Tab Row
+            ScrollableTabRow(
+                selectedTabIndex = selectedTabIndex,
+                containerColor = Color.Transparent,
+                contentColor = PrimaryRed,
+                edgePadding = 0.dp,
+                divider = {},
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                        color = PrimaryRed
+                    )
                 }
-
-                error != null -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = TextSecondary,
-                                modifier = Modifier.size(64.dp)
-                            )
+            ) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = {
                             Text(
-                                text = error ?: "Unknown error",
-                                color = Color(0xFFFF6B6B),
+                                text = title,
                                 fontSize = 16.sp,
-                                textAlign = TextAlign.Center
+                                fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selectedTabIndex == index) PrimaryRed else TextSecondary
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            OutlinedButton(
-                                onClick = onBackClick
-                            ) {
-                                Text("Go Back")
-                            }
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Tab Content
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedTabIndex) {
+                    0 -> {
+                        when {
+                            isLoading -> LoadingIndicator("Loading profile...")
+                            error != null -> ErrorMessage(error!!, onBackClick)
+                            profile != null -> TraktProfileContent(profile = profile!!)
                         }
                     }
-                }
-
-                profile != null -> {
-                    TraktProfileContent(
-                        profile = profile!!,
-                        onOpenTraktClick = {
-                            val username = profile!!.username
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
-                            intent.data = android.net.Uri.parse("https://trakt.tv/users/$username")
-                            context.startActivity(intent)
-                        }
+                    1 -> TraktMediaTabContent(
+                        traktRepository = traktRepository,
+                        tabType = "collection",
+                        onMovieClick = onMovieClick,
+                        onTvShowClick = onTvShowClick
+                    )
+                    2 -> TraktMediaTabContent(
+                        traktRepository = traktRepository,
+                        tabType = "watchlist",
+                        onMovieClick = onMovieClick,
+                        onTvShowClick = onTvShowClick
+                    )
+                    3 -> TraktMediaTabContent(
+                        traktRepository = traktRepository,
+                        tabType = "recommendations",
+                        onMovieClick = onMovieClick,
+                        onTvShowClick = onTvShowClick
                     )
                 }
             }
@@ -198,9 +208,262 @@ fun TraktProfileScreen(
 }
 
 @Composable
+private fun LoadingIndicator(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(48.dp),
+                color = PrimaryRed,
+                strokeWidth = 3.dp
+            )
+            Text(
+                text = message,
+                color = TextSecondary,
+                fontSize = 16.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ErrorMessage(message: String, onBackClick: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(64.dp)
+            )
+            Text(
+                text = message,
+                color = Color(0xFFFF6B6B),
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedButton(onClick = onBackClick) {
+                Text("Go Back")
+            }
+        }
+    }
+}
+
+@Composable
+private fun TraktMediaTabContent(
+    traktRepository: TraktRepository,
+    tabType: String,
+    onMovieClick: (Int) -> Unit,
+    onTvShowClick: (Int) -> Unit
+) {
+    val tmdbApiService = remember { ApiClient.tmdbApiService }
+    val posterCache = remember { mutableStateMapOf<String, String?>() }
+    var mediaItems by remember { mutableStateOf<List<MyListItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(tabType) {
+        isLoading = true
+        error = null
+        try {
+            val results = mutableListOf<MyListItem>()
+            val processedIds = mutableSetOf<String>()
+
+            // Fetch both movies and shows
+            val types = listOf("movies", "shows")
+            
+            for (type in types) {
+                val flow = when (tabType) {
+                    "collection" -> traktRepository.getCollection(type)
+                    "watchlist" -> traktRepository.getWatchlist(type)
+                    else -> traktRepository.getRecommendations(type)
+                }
+
+                flow.collect { result ->
+                    result.onSuccess { items ->
+                        items.forEach { item ->
+                            val movie = (item as? com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktCollectionItem)?.movie
+                                ?: (item as? com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktWatchlistItem)?.movie
+                                ?: (item as? com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktRecommendation)?.movie
+                            
+                            val show = (item as? com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktCollectionItem)?.show
+                                ?: (item as? com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktWatchlistItem)?.show
+                                ?: (item as? com.kiduyuk.klausk.kiduyutv.data.model.trakt.TraktRecommendation)?.show
+
+                            if (movie != null) {
+                                movie.ids.tmdb?.let { tmdbId ->
+                                    val key = "movie-$tmdbId"
+                                    if (processedIds.add(key)) {
+                                        results.add(MyListItem(
+                                            id = tmdbId,
+                                            title = movie.title,
+                                            posterPath = null,
+                                            type = "movie",
+                                            voteAverage = movie.rating ?: 0.0
+                                        ))
+                                    }
+                                }
+                            } else if (show != null) {
+                                show.ids.tmdb?.let { tmdbId ->
+                                    val key = "tv-$tmdbId"
+                                    if (processedIds.add(key)) {
+                                        results.add(MyListItem(
+                                            id = tmdbId,
+                                            title = show.title,
+                                            posterPath = null,
+                                            type = "tv",
+                                            voteAverage = show.rating ?: 0.0
+                                        ))
+                                    }
+                                }
+                            }
+                        }
+                    }.onFailure { e ->
+                        Log.e("TraktProfileScreen", "Failed to fetch $tabType $type: ${e.message}")
+                    }
+                }
+            }
+
+            mediaItems = results.toList()
+            
+            // Background loading for posters
+            withContext(Dispatchers.IO) {
+                mediaItems.forEachIndexed { index, item ->
+                    val key = "${item.type}-${item.id}"
+                    val path = posterCache[key] ?: try {
+                        if (item.type == "movie") {
+                            tmdbApiService.getMovieDetail(item.id).posterPath
+                        } else {
+                            tmdbApiService.getTvShowDetail(item.id).posterPath
+                        }
+                    } catch (e: Exception) { null }
+                    
+                    if (path != null) {
+                        posterCache[key] = path
+                        withContext(Dispatchers.Main) {
+                            mediaItems = mediaItems.toMutableList().apply {
+                                this[index] = this[index].copy(posterPath = path)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            error = e.message
+        } finally {
+            isLoading = false
+        }
+    }
+
+    if (isLoading && mediaItems.isEmpty()) {
+        LoadingIndicator("Loading $tabType...")
+    } else if (error != null && mediaItems.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(text = "Error: $error", color = Color.Red)
+        }
+    } else if (mediaItems.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(text = "No items found in your $tabType.", color = TextSecondary)
+        }
+    } else {
+        TraktMediaGrid(
+            items = mediaItems,
+            onMovieClick = onMovieClick,
+            onTvShowClick = onTvShowClick
+        )
+    }
+}
+
+@Composable
+private fun TraktMediaGrid(
+    items: List<MyListItem>,
+    onMovieClick: (Int) -> Unit,
+    onTvShowClick: (Int) -> Unit
+) {
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val spacing = 16.dp
+    val columns = 6
+    val calculatedCardWidth = (screenWidth - 100.dp - (spacing * (columns - 1))) / columns
+    val calculatedCardHeight = calculatedCardWidth * 1.5f
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+        verticalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        items(items) { item ->
+            val interactionSource = remember { MutableInteractionSource() }
+            val isFocused by interactionSource.collectIsFocusedAsState()
+
+            if (item.type == "movie") {
+                MovieCard(
+                    movie = Movie(
+                        id = item.id,
+                        title = item.title,
+                        overview = "",
+                        posterPath = item.posterPath,
+                        backdropPath = null,
+                        voteAverage = item.voteAverage,
+                        releaseDate = null,
+                        genreIds = null,
+                        popularity = 0.0
+                    ),
+                    isSelected = isFocused,
+                    onClick = { onMovieClick(item.id) },
+                    modifier = Modifier
+                        .width(calculatedCardWidth)
+                        .height(calculatedCardHeight)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) { onMovieClick(item.id) }
+                )
+            } else {
+                TvShowCard(
+                    tvShow = TvShow(
+                        id = item.id,
+                        name = item.title,
+                        overview = "",
+                        posterPath = item.posterPath,
+                        backdropPath = null,
+                        voteAverage = item.voteAverage,
+                        firstAirDate = null,
+                        genreIds = null,
+                        popularity = 0.0
+                    ),
+                    isSelected = isFocused,
+                    onClick = { onTvShowClick(item.id) },
+                    modifier = Modifier
+                        .width(calculatedCardWidth)
+                        .height(calculatedCardHeight)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) { onTvShowClick(item.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun TraktProfileContent(
-    profile: TraktUser,
-    onOpenTraktClick: () -> Unit
+    profile: TraktUser
 ) {
     val username = profile.username
     val avatarUrl = remember(username) {
@@ -322,39 +585,6 @@ private fun TraktProfileContent(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
-
-        // Open on Trakt.tv Button
-        val interactionSource = remember { MutableInteractionSource() }
-        val isFocused by interactionSource.collectIsFocusedAsState()
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (isFocused) PrimaryRed.copy(alpha = 0.8f) else PrimaryRed)
-                .border(
-                    width = if (isFocused) 2.dp else 0.dp,
-                    color = if (isFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onOpenTraktClick
-                )
-                .focusable(interactionSource = interactionSource),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Open on Trakt.tv",
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

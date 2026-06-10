@@ -407,7 +407,13 @@ fun NavGraph(navController: NavHostController) {
         // Trakt Profile Screen
         composable(Screen.TraktProfile.route) {
             TraktProfileScreen(
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onMovieClick = { movieId ->
+                    navController.navigate(Screen.MovieDetail.createRoute(movieId))
+                },
+                onTvShowClick = { tvId ->
+                    navController.navigate(Screen.TvShowDetail.createRoute(tvId))
+                }
             )
         }
 
