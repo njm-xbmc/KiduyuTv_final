@@ -173,7 +173,7 @@ class PlayerActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
 
-            setBackgroundColor(0x00000000) // transparent
+            //setBackgroundColor(0x00000000)  transparent
 
             settings.apply {
                 javaScriptEnabled = true
@@ -202,8 +202,10 @@ class PlayerActivity : AppCompatActivity() {
             setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY)
             overScrollMode = View.OVER_SCROLL_NEVER
 
-            // Note: layer type is set by createWebView() based on device capabilities.
-            // Do not override it here.
+            // Note: layer type is intentionally NOT set. We let WebView pick its
+            // own rendering path (HW on capable devices, SW otherwise). Manually
+            // setting LAYER_TYPE_NONE/HARDWARE/SOFTWARE on Fire TV's WebView has
+            // been a source of black-screen bugs, so we trust the platform here.
 
             // Add JavaScript interface for receiving progress updates from the player
             addJavascriptInterface(WebAppInterface(), JS_INTERFACE_NAME)
@@ -214,12 +216,6 @@ class PlayerActivity : AppCompatActivity() {
                     Log.i(TAG, "[WebView] Page finished loading with AdBlocker")
                     // Inject progress tracking script after page loads
                     injectProgressTrackingScript()
-                    // Force AWV to re-composite its surface after page settles
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        fixAWVSurfaceViewZOrder(rootLayout)
-                        webView.visibility = View.INVISIBLE
-                        webView.postDelayed({ webView.visibility = View.VISIBLE }, 100)
-                    }, 800) // Delay to allow page to settle
                 },
                 onError = {
                     hasPageError = true
@@ -300,18 +296,8 @@ class PlayerActivity : AppCompatActivity() {
         })
     }
 
-    private fun fixAWVSurfaceViewZOrder(parent: ViewGroup) {
-        for (i in 0 until parent.childCount) {
-            val child = parent.getChildAt(i)
-            if (child is android.view.SurfaceView) {
-                child.setZOrderOnTop(false)
-                child.setZOrderMediaOverlay(false) //
-                Log.i(TAG, "[SurfaceView] Fixed z-order on AWV SurfaceView")
-            } else if (child is ViewGroup) {
-                fixAWVSurfaceViewZOrder(child)
-            }
-        }
-    }
+    // fixAWVSurfaceViewZOrder removed: manual z-order tweaking caused black-screen
+    // issues on Fire TV. WebView's own compositing path is now trusted.
 
     /**
      * JavaScript interface for receiving progress updates from the WebView player.
@@ -661,22 +647,14 @@ class PlayerActivity : AppCompatActivity() {
 
         if (isFireTV) {
             val isAmazonChromium = isAmazonChromiumAvailable()
-
             Log.i(TAG, "[WebView] Fire TV detected")
             Log.i(TAG, "[WebView] Amazon Chromium WebView: $isAmazonChromium")
             Log.i(TAG, "[WebView] Hardware acceleration available: $isHardwareAccelerated")
 
-            webView.setLayerType(View.LAYER_TYPE_NONE, null)
-            Log.i(TAG, "[WebView] Fire TV: hardware acceleration disabled")
-            webView.setBackgroundColor(0x00000000) // transparent
-
-//            if (isHardwareAccelerated) {
-//                webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-//                Log.i(TAG, "[WebView] Fire TV: hardware acceleration enabled")
-//            } else {
-//                webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-//                Log.w(TAG, "[WebView] Fire TV: hardware acceleration unavailable, using software rendering")
-//            }
+            // No setLayerType call — let WebView choose its own rendering path.
+            // Opaque black background so the video surface composites on top
+            // of a known-good base layer on Fire TV's chromium WebView.
+            webView.setBackgroundColor(android.graphics.Color.BLACK)
 
             if (isAmazonChromium) {
                 Log.i(TAG, "[WebView] ✅ Running on Amazon Chromium WebView (com.amazon.webview.chromium)")
@@ -687,13 +665,8 @@ class PlayerActivity : AppCompatActivity() {
             Log.i(TAG, "[WebView] Non-Fire TV device")
             Log.i(TAG, "[WebView] Hardware acceleration available: $isHardwareAccelerated")
 
-            if (isHardwareAccelerated) {
-                webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-                Log.i(TAG, "[WebView] Hardware acceleration enabled")
-            } else {
-                webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                Log.w(TAG, "[WebView] Hardware acceleration unavailable, using software rendering")
-            }
+            // Same here: no setLayerType — trust the platform default.
+            webView.setBackgroundColor(android.graphics.Color.BLACK)
         }
 
         logWebViewInfo(webView)
