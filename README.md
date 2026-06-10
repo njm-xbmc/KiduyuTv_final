@@ -16,7 +16,7 @@
 [![TMDB API](https://img.shields.io/badge/TMDB%20API-01B4E4?style=for-the-badge&logo=themoviedatabase&logoColor=white)](https://www.themoviedb.org)
 
 </div>
-
+Join telegram channel to know when updates are available :https://t.me/kiduyutv
 ---
 
 ## Table of Contents
