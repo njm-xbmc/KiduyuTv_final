@@ -20,12 +20,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import com.kiduyuk.klausk.kiduyutv.data.api.TmdbApiService
+import com.kiduyuk.klausk.kiduyutv.data.api.ApiClient
 import com.kiduyuk.klausk.kiduyutv.data.model.Movie
 import com.kiduyuk.klausk.kiduyutv.data.model.TvShow
 import com.kiduyuk.klausk.kiduyutv.data.model.CastMember
@@ -41,7 +40,6 @@ import com.kiduyuk.klausk.kiduyutv.util.TraktAuthManager
 import com.kiduyuk.klausk.kiduyutv.viewmodel.HomeViewModel
 import com.kiduyuk.klausk.kiduyutv.viewmodel.MyListItem
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,16 +72,22 @@ fun MyListScreen(
 ) {
     // Collect My List from the global manager.
     val myList by MyListManager.myList.collectAsState()
-    val context = LocalContext.current
 
     // Trakt integration
     val traktRepository = remember {
         TraktRepository(TraktApiClient.apiService, TraktAuthManager)
     }
+    val tmdbApiService = remember { ApiClient.tmdbApiService }
     val isTraktConnected by TraktAuthManager.isTraktAuthenticated.collectAsState()
     val _traktWatchHistory = remember { MutableStateFlow<List<TraktHistoryItem>>(emptyList()) }
     val traktWatchHistory: StateFlow<List<TraktHistoryItem>> = _traktWatchHistory.asStateFlow()
-    val isLoadingTrakt by remember { mutableStateOf(false) }
+
+    // Cache for TMDB poster paths to avoid duplicate API calls
+    val posterCache = remember { mutableStateMapOf<String, String?>() }
+
+    // State for watched items with poster paths loaded
+    val _watchedItems = remember { MutableStateFlow<List<MyListItem>>(emptyList()) }
+    val watchedItems: StateFlow<List<MyListItem>> = _watchedItems.asStateFlow()
 
     // Fetch Trakt watched history when connected
     LaunchedEffect(isTraktConnected) {
@@ -92,6 +96,53 @@ fun MyListScreen(
                 result.fold(
                     onSuccess = { history ->
                         _traktWatchHistory.value = history
+                        // Load poster paths asynchronously
+                        viewModelScope.launch {
+                            val items = mutableListOf<MyListItem>()
+                            history.forEach { item ->
+                                when (item.type) {
+                                    "movies" -> item.movie?.ids?.tmdb?.let { tmdbId ->
+                                        val cacheKey = "movie-$tmdbId"
+                                        val posterPath = posterCache.getOrPut(cacheKey) {
+                                            try {
+                                                tmdbApiService.getMovieDetail(tmdbId).posterPath
+                                            } catch (e: Exception) {
+                                                null
+                                            }
+                                        }
+                                        items.add(
+                                            MyListItem(
+                                                id = tmdbId,
+                                                title = item.movie?.title ?: "Unknown",
+                                                posterPath = posterPath,
+                                                type = "movie",
+                                                voteAverage = item.movie?.rating ?: 0.0
+                                            )
+                                        )
+                                    }
+                                    "shows" -> item.show?.ids?.tmdb?.let { tmdbId ->
+                                        val cacheKey = "tv-$tmdbId"
+                                        val posterPath = posterCache.getOrPut(cacheKey) {
+                                            try {
+                                                tmdbApiService.getTvShowDetail(tmdbId).posterPath
+                                            } catch (e: Exception) {
+                                                null
+                                            }
+                                        }
+                                        items.add(
+                                            MyListItem(
+                                                id = tmdbId,
+                                                title = item.show?.title ?: "Unknown",
+                                                posterPath = posterPath,
+                                                type = "tv",
+                                                voteAverage = item.show?.rating ?: 0.0
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                            _watchedItems.value = items.distinctBy { "${it.type}-${it.id}" }
+                        }
                     },
                     onFailure = {
                         // Handle error silently - watched tab will show empty state
@@ -100,6 +151,7 @@ fun MyListScreen(
             }
         } else {
             _traktWatchHistory.value = emptyList()
+            _watchedItems.value = emptyList()
         }
     }
 
@@ -188,36 +240,7 @@ fun MyListScreen(
 
             // Content based on selected tab
             val currentList = when {
-                isTraktConnected && selectedTabIndex == 0 -> {
-                    // Watched tab - return items derived from Trakt history
-                    val watchedMovies = traktWatchHistory.value
-                        .filter { it.type == "movies" && it.movie != null }
-                        .mapNotNull { item ->
-                            item.movie?.ids?.tmdb?.let { tmdbId ->
-                                MyListItem(
-                                    id = tmdbId,
-                                    title = item.movie?.title ?: "Unknown",
-                                    posterPath = item.movie?.posterPath ?: item.movie?.ids?.tmdb?.toString(),
-                                    type = "movie",
-                                    voteAverage = item.movie?.rating ?: 0.0
-                                )
-                            }
-                        }
-                    val watchedShows = traktWatchHistory.value
-                        .filter { it.type == "shows" && it.show != null }
-                        .mapNotNull { item ->
-                            item.show?.ids?.tmdb?.let { tmdbId ->
-                                MyListItem(
-                                    id = tmdbId,
-                                    title = item.show?.title ?: "Unknown",
-                                    posterPath = item.show?.posterPath ?: item.show?.ids?.tmdb?.toString(),
-                                    type = "tv",
-                                    voteAverage = item.show?.rating ?: 0.0
-                                )
-                            }
-                        }
-                    (watchedMovies + watchedShows).distinctBy { it.id to it.type }
-                }
+                isTraktConnected && selectedTabIndex == 0 -> watchedItems.value
                 !isTraktConnected && selectedTabIndex == 0 -> movies
                 !isTraktConnected && selectedTabIndex == 1 -> tvShows
                 !isTraktConnected && selectedTabIndex == 2 -> companies
