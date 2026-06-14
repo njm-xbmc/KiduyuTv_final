@@ -134,6 +134,55 @@
 -dontwarn com.sun.jna.**
 
 ##############################################
+# 📢 STARTAPP / START.IO
+##############################################
+
+-keep class com.startapp.** { *; }
+-keep class com.startapp.sdk.adsbase.** { *; }
+-keep class com.startapp.sdk.ads.banner.** { *; }
+-keep class com.startapp.sdk.ads.nativead.** { *; }
+-keep class com.startapp.sdk.ads.video.** { *; }
+-keepattributes *Annotation*
+-keepclassmembers class ** {
+    @com.startapp.sdk.adsbase.annotations.* <fields>;
+    @com.startapp.sdk.adsbase.annotations.* <methods>;
+}
+-keep class com.startapp.sdk.adsbase.mediation.** { *; }
+
+##############################################
+# 📢 UNITY ADS
+##############################################
+
+-keep class com.unity3d.ads.** { *; }
+-keep class com.unity3d.services.** { *; }
+-keep class com.unity3d.mediation.** { *; }
+-keep class com.unity3d.services.banners.** { *; }
+-keep class com.unity3d.services.banners.view.** { *; }
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+-keepattributes Exceptions
+
+##############################################
+# 📢 WORTISE
+##############################################
+
+-keep class com.wortise.** { *; }
+-keep class com.wortise.ads.** { *; }
+-keep class com.wortise.ads.banner.** { *; }
+-keep class com.wortise.ads.interstitial.** { *; }
+-keep class com.wortise.ads.rewarded.** { *; }
+-keep class com.wortise.ads.nativead.** { *; }
+-keep class com.wortise.ads.appopen.** { *; }
+-keep class com.wortise.ads.mediation.** { *; }
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+-keepattributes Exceptions
+
+##############################################
 # 🚫 OPTIONAL OPTIMIZATION CONTROL
 ##############################################
 
