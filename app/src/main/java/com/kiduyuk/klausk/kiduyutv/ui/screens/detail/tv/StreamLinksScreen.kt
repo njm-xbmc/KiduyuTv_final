@@ -150,7 +150,7 @@ fun StreamLinksScreen(
                     )
 
                     Text(
-                        text = "${releaseDate?.take(4)} • ⭐ $voteAverage",
+                        text = "${releaseDate?.take(4)} • ⭐ ${String.format(java.util.Locale.US, "%.1f", voteAverage)}",
                         color = TextSecondary
                     )
                 }

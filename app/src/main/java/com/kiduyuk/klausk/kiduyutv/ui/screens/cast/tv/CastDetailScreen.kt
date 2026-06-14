@@ -383,7 +383,7 @@ private fun CastDetailContent(
                         .fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Name and Save Button Row
+                    // Name and Save/Cast Images Row
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth(),
@@ -398,21 +398,37 @@ private fun CastDetailContent(
                             modifier = Modifier.weight(1f)
                         )
 
-                        // Save Button
-                        Button(
-                            onClick = onSaveClick,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSaved) MaterialTheme.colorScheme.secondary else SurfaceDark
-                            ),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isSaved) Icons.Default.Check else Icons.Default.Add,
-                                contentDescription = if (isSaved) "Saved" else "Save to My List",
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = if (isSaved) "Saved" else "Save to List")
+                            // Save Button
+                            Button(
+                                onClick = onSaveClick,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isSaved) MaterialTheme.colorScheme.secondary else SurfaceDark
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isSaved) Icons.Default.Check else Icons.Default.Add,
+                                    contentDescription = if (isSaved) "Saved" else "Save to My List",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = if (isSaved) "Saved" else "Save to List")
+                            }
+
+                            // Show Cast Images Button
+                            if (profileImages.isNotEmpty()) {
+                                Button(
+                                    onClick = { onShowImagesClick(castMember.id, castMember.name) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Text("Show Cast Images")
+                                }
+                            }
                         }
                     }
 
@@ -442,18 +458,6 @@ private fun CastDetailContent(
                             biography = castMember.overview!!,
                             onClick = { showBiographyDialog = true }
                         )
-                    }
-
-                    // Show Cast Images Button
-                    if (profileImages.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { onShowImagesClick(castMember.id, castMember.name) },
-                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceDark),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Show Cast Images")
-                        }
                     }
                 }
             }

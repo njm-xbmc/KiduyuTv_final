@@ -235,14 +235,15 @@ class PlayerActivity : AppCompatActivity() {
                     Log.d(TAG, "[WebChrome] Load progress: $newProgress%")
                 }
             }
+            loadUrl(url)
 
-            val iframeHtml = intent.getStringExtra("IFRAME_HTML")
-            if (iframeHtml != null) {
-                val baseUrl = StreamProviderManager.getBaseUrl(currentProviderName)
-                loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null)
-            } else {
-                loadUrl(url)
-            }
+//            val iframeHtml = intent.getStringExtra("IFRAME_HTML")
+//            if (iframeHtml != null) {
+//                val baseUrl = StreamProviderManager.getBaseUrl(currentProviderName)
+//                loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null)
+//            } else {
+//                loadUrl(url)
+//            }
         }
 
         cursorView = MouseCursorView(this).apply {
