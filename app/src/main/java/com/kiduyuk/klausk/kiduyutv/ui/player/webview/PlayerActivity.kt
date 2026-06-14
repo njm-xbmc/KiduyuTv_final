@@ -263,30 +263,30 @@ class PlayerActivity : AppCompatActivity() {
             } else {
                 loadUrl(url)
             }
-
-            // Add JavascriptInterface bridge for player events
-            addJavascriptInterface(
-                PlayerBridge { provider, positionSec, season, episode ->
-                    runOnUiThread {
-                        // Update current position from player
-                        currentPlaybackPosition = (positionSec * 1000).toLong()
-
-                        // Update season/episode if provided (TV shows)
-                        if (season != null && episode != null && currentIsTv) {
-                            if (season != currentSeason || episode != currentEpisode) {
-                                Log.i(TAG, "[Episode] Changed S${currentSeason}E${currentEpisode} -> S${season}E${episode}")
-                                currentSeason = season
-                                currentEpisode = episode
-                            }
-                        }
-
-                        // Persist to database
-                        persistWatchProgress()
-                    }
-                },
-                "MavisInterface"
-            )
         }
+
+        // Add JavascriptInterface bridge for player events (must be called on webView, not Activity)
+        webView.addJavascriptInterface(
+            PlayerBridge { provider, positionSec, season, episode ->
+                runOnUiThread {
+                    // Update current position from player
+                    currentPlaybackPosition = (positionSec * 1000).toLong()
+
+                    // Update season/episode if provided (TV shows)
+                    if (season != null && episode != null && currentIsTv) {
+                        if (season != currentSeason || episode != currentEpisode) {
+                            Log.i(TAG, "[Episode] Changed S${currentSeason}E${currentEpisode} -> S${season}E${episode}")
+                            currentSeason = season
+                            currentEpisode = episode
+                        }
+                    }
+
+                    // Persist to database
+                    persistWatchProgress()
+                }
+            },
+            "MavisInterface"
+        )
 
         cursorView = MouseCursorView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
