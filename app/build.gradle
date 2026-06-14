@@ -86,10 +86,10 @@ android {
                     'proguard-rules.pro'
         }
 
-        debug {
-            minifyEnabled false
-            shrinkResources true
-        }
+        //debug {
+        ///    minifyEnabled false
+         //   shrinkResources true
+       // }
     }
 
     compileOptions {
