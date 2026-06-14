@@ -181,18 +181,30 @@ class PlayerActivity : AppCompatActivity() {
                 databaseEnabled = true
                 
                 // Fix: Media Playback User Gesture Restriction
-                // Amazon's WebView implementation is stricter regarding autoplay.
                 mediaPlaybackRequiresUserGesture = false
                 allowFileAccess = true
                 allowContentAccess = true
+                
+                // Viewport scaling
                 loadWithOverviewMode = true
                 useWideViewPort = true
-                builtInZoomControls = false
-                displayZoomControls = false
-                setSupportZoom(false)
-                setSupportMultipleWindows(false)
-                javaScriptCanOpenWindowsAutomatically = false
-                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                
+                // FIX: Changed zoom constraints to allow video players to properly resize video layouts.
+                // We disable visual buttons (displayZoomControls) so it stays clean.
+                builtInZoomControls = false  // True on phones/tablets, False on TV (removes visual artifacts)
+                displayZoomControls = false       // Keeps UI completely clean of ugly +/- buttons
+                setSupportZoom(true)         // Allows standard devices to stretch cinematic views if needed
+                
+                // FIX: Multi-window support must be TRUE for standard HTML5 video elements 
+                // to scale up and trigger full-screen player states natively.
+                setSupportMultipleWindows(true)
+                javaScriptCanOpenWindowsAutomatically = true // Allows player scripts to execute properly
+                
+                // Security layer bypass for http:// streaming streams running on https:// pages
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                }
+                
                 userAgentString = if (isFireTV) {
                     "Mozilla/5.0 (Linux; Android 9; AFTMM Build/PS7233) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 } else {
