@@ -775,9 +775,9 @@ class TmdbRepository {
     fun cleanExpiredCache() {
         DatabaseManager.cleanExpiredCache()
     }
-}
 
     /** Fetches images for a specific person. */
     suspend fun getPersonImages(personId: Int): Result<List<ProfileImage>> = runCatching {
         api.getPersonImages(personId).profiles
     }
+}
