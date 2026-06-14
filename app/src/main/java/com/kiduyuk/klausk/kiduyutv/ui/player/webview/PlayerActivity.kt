@@ -228,20 +228,7 @@ class PlayerActivity : AppCompatActivity() {
                     hasPageError = true
                     isPageLoading = false
                     Log.e(TAG, "[WebView] Error received with AdBlocker")
-                },
-                onUrlChanged = { newUrl ->
-                    if (currentIsTv) {
-                        WebViewUtils.parseEpisodeFromUrl(newUrl, currentProviderName)?.let { (tmdbId, season, episode) ->
-                            if (tmdbId == currentTmdbId && (season != currentSeason || episode != currentEpisode)) {
-                                Log.i(TAG, "[Episode] Detected change S${currentSeason}E${currentEpisode} -> S${season}E${episode}")
-                                currentSeason = season
-                                currentEpisode = episode
-                                currentPlaybackPosition = 0L
-                            }
-                        }
-                    }
                 }
-                //shouldOverrideUrlLoading = { }
             )
 
             webChromeClient = object : WebChromeClient() {
@@ -267,15 +254,38 @@ class PlayerActivity : AppCompatActivity() {
                     Log.d(TAG, "[WebChrome] Load progress: $newProgress%")
                 }
             }
-            loadUrl(url)
+            
 
-//            val iframeHtml = intent.getStringExtra("IFRAME_HTML")
-//            if (iframeHtml != null) {
-//                val baseUrl = StreamProviderManager.getBaseUrl(currentProviderName)
-//                loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null)
-//            } else {
-//                loadUrl(url)
-//            }
+            val iframeHtml = intent.getStringExtra("IFRAME_HTML")
+            if (iframeHtml != null) {
+                val baseUrl = StreamProviderManager.getBaseUrl(currentProviderName)
+                loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null)
+            } else {
+                loadUrl(url)
+            }
+
+            // Add JavascriptInterface bridge for player events
+            addJavascriptInterface(
+                PlayerBridge { provider, positionSec, season, episode ->
+                    runOnUiThread {
+                        // Update current position from player
+                        currentPlaybackPosition = (positionSec * 1000).toLong()
+
+                        // Update season/episode if provided (TV shows)
+                        if (season != null && episode != null && currentIsTv) {
+                            if (season != currentSeason || episode != currentEpisode) {
+                                Log.i(TAG, "[Episode] Changed S${currentSeason}E${currentEpisode} -> S${season}E${episode}")
+                                currentSeason = season
+                                currentEpisode = episode
+                            }
+                        }
+
+                        // Persist to database
+                        persistWatchProgress()
+                    }
+                },
+                "MavisInterface"
+            )
         }
 
         cursorView = MouseCursorView(this).apply {
@@ -502,13 +512,11 @@ class PlayerActivity : AppCompatActivity() {
         progressUpdateHandler.postDelayed(progressUpdateRunnable, 15000)
     }
 
-    private fun updateWatchProgress() {
+    private fun persistWatchProgress() {
         if (currentTmdbId == -1) return
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                currentPlaybackPosition += 15000
-
                 repository.updatePlaybackPosition(
                     mediaId = currentTmdbId,
                     mediaType = if (currentIsTv) "tv" else "movie",
@@ -539,10 +547,14 @@ class PlayerActivity : AppCompatActivity() {
                     releaseDate = currentReleaseDate
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "[WatchHistory] Error updating progress: ${e.message}")
+                Log.e(TAG, "[WatchHistory] Error persisting progress: ${e.message}")
             }
         }
+    }
 
+    private fun updateWatchProgress() {
+        // Timer-based sync - uses the current position already set by PlayerBridge
+        persistWatchProgress()
         progressUpdateHandler.postDelayed(progressUpdateRunnable, 15000)
     }
 

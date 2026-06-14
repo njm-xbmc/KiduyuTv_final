@@ -574,6 +574,121 @@ object StreamProviderManager {
 
         val attrString = attributes.map { "${it.key}=\"${it.value}\"" }.joinToString(" ")
 
+        // Unified tracking script for watch progress
+        val trackingScript = """
+            <script>
+            (function () {
+              'use strict';
+              var PROVIDER = '${provider.name.replace("'", "\\'")}';
+
+              var VIDFAST_ORIGINS = {
+                'https://vidfast.pro': 1, 'https://vidfast.in': 1, 'https://vidfast.io': 1,
+                'https://vidfast.me':  1, 'https://vidfast.net': 1, 'https://vidfast.pm': 1,
+                'https://vidfast.xyz': 1
+              };
+
+              function originOK(origin) {
+                switch (PROVIDER) {
+                  case 'Vidrock':  return origin === 'https://vidrock.ru';
+                  case 'VidLink':  return origin === 'https://vidlink.pro';
+                  case 'VidFast':  return !!VIDFAST_ORIGINS[origin];
+                  case 'VidNest':  return origin === 'https://vidnest.fun';
+                  case 'VidUp':    return origin === 'https://vidup.to';
+                  case 'VidCore':  return origin === 'https://vidcore.net';
+                  case 'Peachify': return origin === 'https://peachify.top';
+                  default:         return true;
+                }
+              }
+
+              function emit(position, season, episode) {
+                if (!window.MavisInterface || !window.MavisInterface.onPlayerEvent) return;
+                window.MavisInterface.onPlayerEvent(JSON.stringify({
+                  provider:    PROVIDER,
+                  currentTime: position,
+                  season:      season,
+                  episode:     episode
+                }));
+              }
+
+              function fromStringPayload(str) {
+                if (PROVIDER !== 'Videasy' && PROVIDER !== 'VidKing') return false;
+                var msg;
+                try { msg = JSON.parse(str); } catch (e) { return false; }
+                if (!msg || typeof msg !== 'object') return false;
+                emit(
+                  typeof msg.timestamp === 'number' ? msg.timestamp : null,
+                  typeof msg.season   === 'number' ? msg.season   : null,
+                  typeof msg.episode  === 'number' ? msg.episode  : null
+                );
+                return true;
+              }
+
+              function fromMediaData(payload) {
+                if (!payload || payload.type !== 'MEDIA_DATA' || !payload.data) return false;
+                for (var key in payload.data) {
+                  if (!Object.prototype.hasOwnProperty.call(payload.data, key)) continue;
+                  var item = payload.data[key];
+                  if (!item) continue;
+
+                  var season  = item.last_season_watched  != null ? item.last_season_watched  : null;
+                  var episode = item.last_episode_watched != null ? item.last_episode_watched : null;
+
+                  var ep = null;
+                  if (season != null && episode != null && item.show_progress) {
+                    ep = item.show_progress['s' + season + 'e' + episode] || null;
+                  }
+
+                  var currentTime = null;
+                  if (ep && ep.progress && typeof ep.progress.watched === 'number') {
+                    currentTime = ep.progress.watched;
+                    if (typeof ep.season  === 'number') season  = ep.season;
+                    if (typeof ep.episode === 'number') episode = ep.episode;
+                  } else if (item.progress && typeof item.progress.watched === 'number') {
+                    currentTime = item.progress.watched;
+                  }
+
+                  if (typeof season  === 'string') season  = parseInt(season,  10);
+                  if (typeof episode === 'string') episode = parseInt(episode, 10);
+
+                  emit(currentTime, season, episode);
+                }
+                return true;
+              }
+
+              function fromTimeUpdate(payload) {
+                if (!payload || payload.type !== 'timeupdate' || !payload.data) return false;
+                emit(
+                  typeof payload.data.currentTime === 'number' ? payload.data.currentTime : null,
+                  null,
+                  null
+                );
+                return true;
+              }
+
+              window.addEventListener('message', function (event) {
+                if (!originOK(event.origin)) return;
+                var raw = event.data;
+
+                if (typeof raw === 'string') {
+                  fromStringPayload(raw);
+                  return;
+                }
+                if (!raw || typeof raw !== 'object') return;
+
+                if (raw.type === 'timeupdate') {
+                  fromTimeUpdate(raw);
+                  return;
+                }
+
+                if (raw.type === 'MEDIA_DATA') {
+                  fromMediaData(raw);
+                  return;
+                }
+              });
+            })();
+            </script>
+        """.trimIndent()
+
         return """
             <!DOCTYPE html>
             <html>
@@ -591,14 +706,7 @@ object StreamProviderManager {
                     src="$finalUrl" 
                     $attrString>
                 </iframe>
-                <script>
-                    window.addEventListener('message', function(event) {
-                        if (window.VideasyInterface) {
-                            var data = typeof event.data === 'string' ? event.data : JSON.stringify(event.data);
-                            window.VideasyInterface.postMessage(data);
-                        }
-                    });
-                </script>
+                $trackingScript
             </body>
             </html>
         """.trimIndent()

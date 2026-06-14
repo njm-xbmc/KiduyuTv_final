@@ -13,9 +13,7 @@ import java.io.ByteArrayInputStream
  */
 class AdBlockerWebViewClient(
     private val onPageFinished: () -> Unit,
-    private val onError: () -> Unit,
-    private val onUrlChanged: (String) -> Unit = {},
-    //private val shouldOverrideUrlLoading: (String) -> Unit
+    private val onError: () -> Unit
 ) : WebViewClient() {
 
     private val adDomains = setOf(
@@ -68,10 +66,4 @@ class AdBlockerWebViewClient(
         }
     }
 
-    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-        super.doUpdateVisitedHistory(view, url, isReload)
-        if (url != null) {
-            onUrlChanged(url)
-        }
-    }
 }
