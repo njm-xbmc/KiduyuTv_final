@@ -136,7 +136,7 @@ class PlayerActivity : AppCompatActivity() {
             Log.i(TAG, "[Device] TV detected (${deviceBrand} $deviceModel), cursor enabled, isFireTV=$isFireTV")
         }
 
-        val url = intent.getStringExtra("STREAM_URL") ?: if (isTv) {
+        val url: String = intent.getStringExtra("STREAM_URL") ?: if (isTv) {
             "https://vidlink.pro/tv/$tmdbId/$currentSeason/$currentEpisode?autoplay=true"
         } else {
             "https://vidlink.pro/movie/$tmdbId?autoplay=true"
@@ -197,6 +197,7 @@ class PlayerActivity : AppCompatActivity() {
                     isPageLoading = false
                     Log.e(TAG, "[WebView] Error received with AdBlocker")
                 }
+                //shouldOverrideUrlLoading = { }
             )
 
             webChromeClient = object : WebChromeClient() {
@@ -204,6 +205,8 @@ class PlayerActivity : AppCompatActivity() {
                     super.onShowCustomView(view, callback)
                     Log.i(TAG, "[WebChrome] onShowCustomView called")
                 }
+
+
 
                 override fun onCreateWindow(
                     view: WebView?,

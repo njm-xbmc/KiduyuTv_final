@@ -1,5 +1,6 @@
 package com.kiduyuk.klausk.kiduyutv.ui.player.webview
 
+import android.util.Log
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -12,7 +13,8 @@ import java.io.ByteArrayInputStream
  */
 class AdBlockerWebViewClient(
     private val onPageFinished: () -> Unit,
-    private val onError: () -> Unit
+    private val onError: () -> Unit,
+    //private val shouldOverrideUrlLoading: (String) -> Unit
 ) : WebViewClient() {
 
     private val adDomains = setOf(
@@ -38,6 +40,13 @@ class AdBlockerWebViewClient(
         return super.shouldInterceptRequest(view, request)
     }
 
+    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+        super.shouldOverrideUrlLoading(view, request)
+        val url = request?.url.toString()
+        //shouldOverrideUrlLoading(request?.url?.toString() ?: "")
+        return  false
+    }
+
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
         onPageFinished()
@@ -56,8 +65,11 @@ class AdBlockerWebViewClient(
         )
     }
 
+
+
     override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
         if (request?.isForMainFrame == true) {
+            Log.i("AdblockWebview", "Received error: ${error?.description}")
             onError()
         }
     }
