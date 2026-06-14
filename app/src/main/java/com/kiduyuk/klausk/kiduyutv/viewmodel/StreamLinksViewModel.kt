@@ -65,17 +65,26 @@ class StreamLinksViewModel : ViewModel() {
         /**
          * Build a list of StreamProviderUi objects for the UI.
          * Uses StreamProviderManager to generate URLs.
+         * @param filterPhoneOnly If true, filters out providers with isPhoneOnly = true (for TV devices).
          */
         private fun buildStreamProviders(
             tmdbId: Int,
             isTv: Boolean,
             season: Int?,
-            episode: Int?
+            episode: Int?,
+            filterPhoneOnly: Boolean = false
         ): List<StreamProviderUi> {
             val type = if (isTv) "tv" else "movie"
 
             // Get all providers from StreamProviderManager and create UI-friendly versions
-            return StreamProviderManager.providers.map { provider ->
+            // Optionally filter out isPhoneOnly providers (for TV device compatibility)
+            val providers = if (filterPhoneOnly) {
+                StreamProviderManager.providers.filter { !it.isPhoneOnly }
+            } else {
+                StreamProviderManager.providers
+            }
+
+            return providers.map { provider ->
                 val url = StreamProviderManager.generateUrl(
                     providerName = provider.name,
                     tmdbId = tmdbId,
@@ -124,17 +133,19 @@ class StreamLinksViewModel : ViewModel() {
     /**
      * Load stream providers and check their availability.
      * Uses buildStreamProviders() which delegates to StreamProviderManager.
+     * @param filterPhoneOnly If true, filters out providers with isPhoneOnly = true (for TV devices).
      */
     fun loadStreamProviders(
         tmdbId: Int,
         isTv: Boolean,
         season: Int?,
         episode: Int?,
-        context: Context
+        context: Context,
+        filterPhoneOnly: Boolean = false
     ) {
         _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
-            val initialProviders = buildStreamProviders(tmdbId, isTv, season, episode)
+            val initialProviders = buildStreamProviders(tmdbId, isTv, season, episode, filterPhoneOnly)
 
             val client = getOkHttpClient(context)
             val finalProviders = mutableListOf<StreamProviderUi>()

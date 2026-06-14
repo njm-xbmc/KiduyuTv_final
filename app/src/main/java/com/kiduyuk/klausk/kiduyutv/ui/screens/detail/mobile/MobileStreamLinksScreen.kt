@@ -87,7 +87,7 @@ fun MobileStreamLinksScreen(
     }
 
     LaunchedEffect(tmdbId, isTv, season, episode) {
-        viewModel.loadStreamProviders(tmdbId, isTv, season, episode, context)
+        viewModel.loadStreamProviders(tmdbId, isTv, season, episode, context, filterPhoneOnly = false)
     }
 
     // Auto-launch if a default provider is set and providers have loaded

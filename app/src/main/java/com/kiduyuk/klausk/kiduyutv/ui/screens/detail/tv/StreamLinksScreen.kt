@@ -61,7 +61,7 @@ fun StreamLinksScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(tmdbId, isTv, season, episode) {
-        viewModel.loadStreamProviders(tmdbId, isTv, season, episode, context)
+        viewModel.loadStreamProviders(tmdbId, isTv, season, episode, context, filterPhoneOnly = true)
     }
 
     Box(
