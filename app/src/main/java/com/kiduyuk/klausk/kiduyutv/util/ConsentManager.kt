@@ -6,9 +6,7 @@ import android.util.Log
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
-import com.startapp.sdk.adsbase.StartAppSDK
 import com.unity3d.ads.metadata.MetaData
-import com.wortise.ads.WortiseSdk
 
 /**
  * Manages GDPR consent using Google's User Messaging Platform (UMP).
@@ -78,25 +76,22 @@ object ConsentManager {
      * Forwards the UMP consent decision to StartApp, Unity Ads, and Wortise.
      * This should be called **after** UMP has resolved so each SDK knows
      * whether it may use personal data for ad targeting.
+     *
+     * Note on SDK API compatibility:
+     * - StartApp inapp-sdk 5.2.6 has no programmatic consent API; targeting
+     *   is controlled via the dashboard. We log only.
+     * - Unity Ads uses the `MetaData` "gdpr.consent" / "privacy.consent" keys.
+     * - Wortise SDK 1.7.2 uses the UMP integration implicitly — no manual
+     *   call required. We log only.
      */
     private fun propagateConsentToAllNetworks(context: Context) {
         val canPersonalize = canShowPersonalizedAds(context)
         Log.i(TAG, "Propagating consent to all networks: personalize=$canPersonalize")
 
         // ── StartApp ──────────────────────────────────────────────────────
-        try {
-            StartAppSDK.setUserConsent(
-                context,
-                "pas",
-                if (canPersonalize)
-                    com.startapp.sdk.adsbase.ConsentType.PERSONALIZED_CONSENT
-                else
-                    com.startapp.sdk.adsbase.ConsentType.NON_PERSONALIZED_CONSENT,
-                true
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to forward consent to StartApp: ${e.message}")
-        }
+        // StartApp inapp-sdk 5.2.6 has no setUserConsent/ConsentType API.
+        // Consent must be configured from the StartApp dashboard.
+        Log.i(TAG, "StartApp: consent handled via dashboard (no SDK API).")
 
         // ── Unity Ads ─────────────────────────────────────────────────────
         try {
@@ -110,17 +105,9 @@ object ConsentManager {
         }
 
         // ── Wortise ───────────────────────────────────────────────────────
-        try {
-            WortiseSdk.setUserConsent(
-                context,
-                if (canPersonalize)
-                    com.wortise.ads.ConsentStatus.GRANTED
-                else
-                    com.wortise.ads.ConsentStatus.DENIED
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to forward consent to Wortise: ${e.message}")
-        }
+        // Wortise SDK 1.7.2 reads Google UMP consent automatically once UMP
+        // is initialised. No manual setUserConsent() call is required.
+        Log.i(TAG, "Wortise: consent handled automatically via UMP integration.")
     }
 
     /**

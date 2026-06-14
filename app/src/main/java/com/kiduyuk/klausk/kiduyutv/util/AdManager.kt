@@ -3,8 +3,12 @@ package com.kiduyuk.klausk.kiduyutv.util
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
@@ -200,5 +204,45 @@ object AdManager {
 
     val isInterstitialReady: Boolean get() = interstitialAd != null
     val isRewardedReady: Boolean get() = rewardedAd != null
+
+    // ── Banner (AdMob) ────────────────────────────────────────────────────
+
+    /**
+     * Loads an AdMob banner into the supplied [container].
+     * The caller is responsible for placing the container in the layout.
+     * No-op if ads are disabled by the user.
+     */
+    fun loadBanner(activity: Activity, container: ViewGroup) {
+        if (!shouldShowAds(activity)) {
+            Log.i(TAG, "Ads disabled - skipping AdMob banner")
+            return
+        }
+        if (!isInitialised) {
+            Log.w(TAG, "AdMob not initialised yet - skipping banner load")
+            return
+        }
+        try {
+            container.removeAllViews()
+            val unitId = if (BuildConfig.FLAVOR == "tv")
+                AdUnitIds.TV_BANNER
+            else
+                AdUnitIds.PHONE_BANNER
+
+            val adView = AdView(activity)
+            adView.adUnitId = unitId
+            adView.setAdSize(AdSize.BANNER)
+            container.addView(
+                adView,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            adView.loadAd(AdRequest.Builder().build())
+            Log.i(TAG, "AdMob banner loading")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load AdMob banner", e)
+        }
+    }
 }
 
