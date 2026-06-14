@@ -41,13 +41,6 @@ class AdBlockerWebViewClient(
         return super.shouldInterceptRequest(view, request)
     }
 
-    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-        super.shouldOverrideUrlLoading(view, request)
-        val url = request?.url.toString()
-        //shouldOverrideUrlLoading(request?.url?.toString() ?: "")
-        return  false
-    }
-
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
         onPageFinished()
