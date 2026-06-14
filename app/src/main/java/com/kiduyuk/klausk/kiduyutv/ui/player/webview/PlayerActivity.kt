@@ -269,7 +269,7 @@ class PlayerActivity : AppCompatActivity() {
         webView.addJavascriptInterface(
             PlayerBridge { provider, positionSec, season, episode ->
                 runOnUiThread {
-                    // Update current position from player
+                    // Update current position from player (don't save yet - timer handles DB save)
                     currentPlaybackPosition = (positionSec * 1000).toLong()
 
                     // Update season/episode if provided (TV shows)
@@ -280,9 +280,6 @@ class PlayerActivity : AppCompatActivity() {
                             currentEpisode = episode
                         }
                     }
-
-                    // Persist to database
-                    persistWatchProgress()
                 }
             },
             "MavisInterface"

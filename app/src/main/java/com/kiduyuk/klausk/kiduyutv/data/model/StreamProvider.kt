@@ -10,7 +10,8 @@ data class StreamProvider(
     val iframeAttributes: Map<String, String> = emptyMap(),
     val allowAttributes: String = "autoplay; encrypted-media; picture-in-picture",
     val movieParameters: (tmdbId: Int, timestamp: Long) -> Map<String, String> = { _, _ -> emptyMap() },
-    val tvParameters: (tmdbId: Int, season: Int, episode: Int, timestamp: Long) -> Map<String, String> = { _, _, _, _ -> emptyMap() }
+    val tvParameters: (tmdbId: Int, season: Int, episode: Int, timestamp: Long) -> Map<String, String> = { _, _, _, _ -> emptyMap() },
+    val isPhoneOnly: Boolean = false
 )
 
 /**
@@ -175,7 +176,29 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 8. Flixer
+        // 8. 111Movies
+        // ═══════════════════════════════════════════════════════════════
+        StreamProvider(
+            name = "111Movies",
+            movieUrlTemplate = "https://111movies.com/movie/%d",
+            tvUrlTemplate = "https://111movies.com/tv/%d/%d/%d",
+            iframeAttributes = mapOf(
+                "frameborder" to "0"
+            ),
+            movieParameters = { _, timestamp ->
+                val params = mutableMapOf<String, String>()
+                if (timestamp > 0) params["startAt"] = timestamp.toString()
+                params
+            },
+            tvParameters = { _, _, _, timestamp ->
+                val params = mutableMapOf<String, String>()
+                if (timestamp > 0) params["startAt"] = timestamp.toString()
+                params
+            }
+        ),
+
+        // ═══════════════════════════════════════════════════════════════
+        // 9. Flixer
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "Flixer",
@@ -241,7 +264,7 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 12. VidAPI
+        // 12. VidAPI (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "VidAPI",
@@ -258,7 +281,8 @@ object StreamProviderManager {
                     "autoplay" to "1",
                     "overlay" to "true"
                 )
-            }
+            },
+            isPhoneOnly = true
         ),
 
         // ═══════════════════════════════════════════════════════════════
@@ -291,7 +315,7 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 14. CineSrc
+        // 14. CineSrc (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "CineSrc",
@@ -309,11 +333,12 @@ object StreamProviderManager {
                     "autoplay" to "true",
                     "autonext" to "true"
                 )
-            }
+            },
+            isPhoneOnly = true
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 15. Vidzen
+        // 15. Vidzen (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "Vidzen",
@@ -324,7 +349,8 @@ object StreamProviderManager {
             },
             tvParameters = { _, _, _, _ ->
                 mapOf("autoplay" to "true")
-            }
+            },
+            isPhoneOnly = true
         ),
 
         // ═══════════════════════════════════════════════════════════════
@@ -444,7 +470,7 @@ object StreamProviderManager {
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 26. Smashystream
+        // 26. Smashystream (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "Smashystream",
@@ -462,42 +488,22 @@ object StreamProviderManager {
                 val params = mutableMapOf<String, String>()
                 if (timestamp > 0) params["startAt"] = timestamp.toString()
                 params
-            }
-        ),
-
-        // ═══════════════════════════════════════════════════════════════
-        // 27. 111Movies
-        // ═══════════════════════════════════════════════════════════════
-        StreamProvider(
-            name = "111Movies",
-            movieUrlTemplate = "https://111movies.com/movie/%d",
-            tvUrlTemplate = "https://111movies.com/tv/%d/%d/%d",
-            iframeAttributes = mapOf(
-                "frameborder" to "0"
-            ),
-            movieParameters = { _, timestamp ->
-                val params = mutableMapOf<String, String>()
-                if (timestamp > 0) params["startAt"] = timestamp.toString()
-                params
             },
-            tvParameters = { _, _, _, timestamp ->
-                val params = mutableMapOf<String, String>()
-                if (timestamp > 0) params["startAt"] = timestamp.toString()
-                params
-            }
+            isPhoneOnly = true
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 28. Autoembed
+        // 27. Autoembed (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "Autoembed",
             movieUrlTemplate = "https://autoembed.co/movie/tmdb/%d",
-            tvUrlTemplate = "https://autoembed.co/tv/tmdb/%d-%d-%d"
+            tvUrlTemplate = "https://autoembed.co/tv/tmdb/%d-%d-%d",
+            isPhoneOnly = true
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 29. EmbedMaster
+        // 29. EmbedMaster (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "EmbedMaster",
@@ -512,27 +518,30 @@ object StreamProviderManager {
                     "nextButton" to "true",
                     "autoNext" to "true"
                 )
-            }
+            },
+            isPhoneOnly = true
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 30. Vidsync
+        // 30. Vidsync (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "Vidsync",
             movieUrlTemplate = "https://vidsync.xyz/embed/movie/%d",
             tvUrlTemplate = "https://vidsync.xyz/embed/tv/%d/%d/%d",
             movieParameters = { _, _ -> mapOf("autoPlay" to "true") },
-            tvParameters = { _, _, _, _ -> mapOf("autoPlay" to "true", "autoNext" to "true") }
+            tvParameters = { _, _, _, _ -> mapOf("autoPlay" to "true", "autoNext" to "true") },
+            isPhoneOnly = true
         ),
 
         // ═══════════════════════════════════════════════════════════════
-        // 31. VidSrc (WTF) v1 - Multi Server
+        // 31. VidSrc (WTF) v1 - Multi Server (Phone only)
         // ═══════════════════════════════════════════════════════════════
         StreamProvider(
             name = "VidSrc (WTF) v1",
             movieUrlTemplate = "https://vidsrc.wtf/api/1/movie/?id=%d",
-            tvUrlTemplate = "https://vidsrc.wtf/api/1/tv/?id=%d&s=%d&e=%d"
+            tvUrlTemplate = "https://vidsrc.wtf/api/1/tv/?id=%d&s=%d&e=%d",
+            isPhoneOnly = true
         )
     )
 
@@ -744,6 +753,26 @@ object StreamProviderManager {
      */
     fun getAllProviderNames(): List<String> {
         return providers.map { it.name }
+    }
+
+    /**
+     * Get providers filtered by device type
+     * @param isTvDevice true for TV devices, false for phone/tablet
+     */
+    fun getProvidersForDevice(isTvDevice: Boolean): List<StreamProvider> {
+        return if (isTvDevice) {
+            providers.filter { !it.isPhoneOnly }
+        } else {
+            providers
+        }
+    }
+
+    /**
+     * Get provider names filtered by device type
+     * @param isTvDevice true for TV devices, false for phone/tablet
+     */
+    fun getProviderNamesForDevice(isTvDevice: Boolean): List<String> {
+        return getProvidersForDevice(isTvDevice).map { it.name }
     }
 
     /**
