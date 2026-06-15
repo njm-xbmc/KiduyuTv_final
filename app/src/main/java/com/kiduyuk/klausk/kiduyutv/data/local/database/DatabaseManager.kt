@@ -2,6 +2,7 @@ package com.kiduyuk.klausk.kiduyutv.data.local.database
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.kiduyuk.klausk.kiduyutv.data.local.dao.CachedMovieDao
@@ -38,6 +39,8 @@ import kotlinx.coroutines.withContext
  * and handles the conversion between database entities and domain models.
  */
 object DatabaseManager {
+
+    private const val TAG = "DatabaseManager"
 
     private lateinit var database: AppDatabase
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
