@@ -433,26 +433,21 @@ class TmdbRepository {
      * @param context Context for database operations
      * @return List of watch history items
      */
-    fun getWatchHistory(context: Context): List<WatchHistoryItem> {
+    suspend fun getWatchHistory(context: Context): List<WatchHistoryItem> {
         DatabaseManager.init(context)
 
-        var items = emptyList<WatchHistoryItem>()
-        applicationScope.launch {
-            val entities = DatabaseManager.getAllWatchHistory().first()
-            items = entities.map { DatabaseManager.entityToWatchHistoryItem(it) }
-        }
-
-// For synchronous access, fall back to the database directly
-        return try {
-            val dao = DatabaseManager.watchHistoryDao()
-            kotlinx.coroutines.runBlocking {
-                dao.getAllWatchHistoryItems().map {
+        return withContext(Dispatchers.IO) {
+            try {
+                val dao = DatabaseManager.watchHistoryDao()
+                val items = dao.getAllWatchHistoryItems().map {
                     DatabaseManager.entityToWatchHistoryItem(it)
                 }
+                Log.d(TAG, "[WatchHistory] getWatchHistory returned ${items.size} items")
+                items
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get watch history", e)
+                emptyList()
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to get watch history", e)
-            items
         }
     }
 

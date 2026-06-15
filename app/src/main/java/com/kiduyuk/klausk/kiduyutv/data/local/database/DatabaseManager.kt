@@ -207,7 +207,9 @@ object DatabaseManager {
                 episodeNumber = episodeNumber,
                 lastWatchedTimestamp = System.currentTimeMillis()
             )
+            Log.d(TAG, "[WatchHistory] Inserting: id=$id, mediaType=$mediaType, title=$title, season=$seasonNumber, episode=$episodeNumber")
             watchHistoryDao().insertWatchHistory(entity)
+            Log.d(TAG, "[WatchHistory] Successfully inserted watch history item for $mediaType: $title")
         }
     }
 

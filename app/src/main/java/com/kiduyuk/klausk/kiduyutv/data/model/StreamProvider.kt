@@ -583,28 +583,32 @@ object StreamProviderManager {
 
         val attrString = attributes.map { "${it.key}=\"${it.value}\"" }.joinToString(" ")
 
-        // Enable postMessage communication from iframes by setting document.domain
-        // This allows the tracking script to receive position updates from the embedded player
-        val domainScript = """
-            <script>
-            try { document.domain = document.domain; } catch(e) {}
-            </script>
-        """.trimIndent()
-
         // Unified tracking script for watch progress
+        // Uses postMessage to receive events from provider iframes
+        // Some providers use targetOrigin='*' so event.origin may be empty
         val trackingScript = """
             <script>
             (function () {
               'use strict';
               var PROVIDER = '${provider.name.replace("'", "\\'")}';
+              var lastReportedTime = 0;
+              var lastReportedSeason = null;
+              var lastReportedEpisode = null;
 
+              // VidFast serves its messages from several mirror domains
               var VIDFAST_ORIGINS = {
                 'https://vidfast.pro': 1, 'https://vidfast.in': 1, 'https://vidfast.io': 1,
                 'https://vidfast.me':  1, 'https://vidfast.net': 1, 'https://vidfast.pm': 1,
                 'https://vidfast.xyz': 1
               };
 
+              // Check if origin is allowed for this provider
               function originOK(origin) {
+                // Some providers use targetOrigin='*' resulting in empty origin
+                // For Videasy and VidKing, we accept any origin since they send stringified JSON
+                if (!origin || origin === '') {
+                  return PROVIDER === 'Videasy' || PROVIDER === 'VidKing';
+                }
                 switch (PROVIDER) {
                   case 'Vidrock':  return origin === 'https://vidrock.ru';
                   case 'VidLink':  return origin === 'https://vidlink.pro';
@@ -613,10 +617,14 @@ object StreamProviderManager {
                   case 'VidUp':    return origin === 'https://vidup.to';
                   case 'VidCore':  return origin === 'https://vidcore.net';
                   case 'Peachify': return origin === 'https://peachify.top';
+                  // Videasy and VidKing send stringified JSON without stable origin
+                  case 'Videasy':  return true;
+                  case 'VidKing':  return true;
                   default:         return true;
                 }
               }
 
+              // Single emit point - send data to Android via MavisInterface
               function emit(position, season, episode) {
                 if (!window.MavisInterface || !window.MavisInterface.onPlayerEvent) return;
                 window.MavisInterface.onPlayerEvent(JSON.stringify({
@@ -627,11 +635,17 @@ object StreamProviderManager {
                 }));
               }
 
+              // ─────────────────────────────────────────────────────────────────
+              // 1. Videasy / VidKing
+              //    event.data is a JSON STRING:
+              //      { id, type, season, episode, timestamp, duration, progress }
+              // ─────────────────────────────────────────────────────────────────
               function fromStringPayload(str) {
                 if (PROVIDER !== 'Videasy' && PROVIDER !== 'VidKing') return false;
                 var msg;
                 try { msg = JSON.parse(str); } catch (e) { return false; }
                 if (!msg || typeof msg !== 'object') return false;
+
                 emit(
                   typeof msg.timestamp === 'number' ? msg.timestamp : null,
                   typeof msg.season   === 'number' ? msg.season   : null,
@@ -640,8 +654,15 @@ object StreamProviderManager {
                 return true;
               }
 
+              // ─────────────────────────────────────────────────────────────────
+              // 2. Vidrock / VidLink / VidFast / VidNest / VidUp / Peachify
+              //    { type: "MEDIA_DATA", data: { "<key>": {...} } }
+              //    Contains: last_season_watched, last_episode_watched,
+              //    progress: { watched, duration }, show_progress: { "s{s}e{e}": {...} }
+              // ─────────────────────────────────────────────────────────────────
               function fromMediaData(payload) {
                 if (!payload || payload.type !== 'MEDIA_DATA' || !payload.data) return false;
+
                 for (var key in payload.data) {
                   if (!Object.prototype.hasOwnProperty.call(payload.data, key)) continue;
                   var item = payload.data[key];
@@ -650,6 +671,7 @@ object StreamProviderManager {
                   var season  = item.last_season_watched  != null ? item.last_season_watched  : null;
                   var episode = item.last_episode_watched != null ? item.last_episode_watched : null;
 
+                  // Prefer the per-episode entry for exact season/episode
                   var ep = null;
                   if (season != null && episode != null && item.show_progress) {
                     ep = item.show_progress['s' + season + 'e' + episode] || null;
@@ -664,39 +686,54 @@ object StreamProviderManager {
                     currentTime = item.progress.watched;
                   }
 
+                  // Coerce string season/episode to integers
                   if (typeof season  === 'string') season  = parseInt(season,  10);
                   if (typeof episode === 'string') episode = parseInt(episode, 10);
+
+                  // Update stored season/episode for timeupdate events
+                  if (season != null)  lastReportedSeason = season;
+                  if (episode != null) lastReportedEpisode = episode;
 
                   emit(currentTime, season, episode);
                 }
                 return true;
               }
 
+              // ─────────────────────────────────────────────────────────────────
+              // 3. VidCore
+              //    { type: "timeupdate", data: { currentTime, duration, percent } }
+              // ─────────────────────────────────────────────────────────────────
               function fromTimeUpdate(payload) {
                 if (!payload || payload.type !== 'timeupdate' || !payload.data) return false;
                 emit(
                   typeof payload.data.currentTime === 'number' ? payload.data.currentTime : null,
-                  null,
-                  null
+                  lastReportedSeason,
+                  lastReportedEpisode
                 );
                 return true;
               }
 
+              // ── message event listener ────────────────────────────────────────
               window.addEventListener('message', function (event) {
+                // Allow messages from empty origin (targetOrigin='*') for compatible providers
                 if (!originOK(event.origin)) return;
+
                 var raw = event.data;
 
+                // (1) Stringified JSON - Videasy / VidKing
                 if (typeof raw === 'string') {
                   fromStringPayload(raw);
                   return;
                 }
                 if (!raw || typeof raw !== 'object') return;
 
+                // (3) VidCore timeupdate (check before MEDIA_DATA)
                 if (raw.type === 'timeupdate') {
                   fromTimeUpdate(raw);
                   return;
                 }
 
+                // (2) MEDIA_DATA - Vidrock / VidLink / VidFast / VidNest / VidUp / Peachify
                 if (raw.type === 'MEDIA_DATA') {
                   fromMediaData(raw);
                   return;
@@ -723,7 +760,6 @@ object StreamProviderManager {
                     src="$finalUrl" 
                     $attrString>
                 </iframe>
-                $domainScript
                 $trackingScript
             </body>
             </html>

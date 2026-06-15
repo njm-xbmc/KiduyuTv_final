@@ -1,16 +1,3 @@
-package com.kiduyuk.klausk.kiduyutv.ui.player.webview
-
-import android.annotation.SuppressLint
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.Message
-import android.os.SystemClock
-import android.util.Log
-import android.view.KeyEvent
-import android.view.MotionEvent
-import android.view.View
 import android.view.ViewGroup
 import android.app.UiModeManager
 import android.content.Context
@@ -30,59 +17,14 @@ import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class PlayerActivity : AppCompatActivity() {
-
-    private lateinit var webView: WebView
-    private lateinit var cursorView: MouseCursorView
-    private lateinit var rootLayout: FrameLayout
-    private var cursorX = 0f
-    private var cursorY = 0f
-    private val moveSpeed = 50f
-    private var screenWidth = 0
-    private var screenHeight = 0
-
-    private var currentSeason = 1
-    private var currentEpisode = 1
-    private var isCursorDisabled = false
-    private var isFireTV = false
-    private var currentProviderName: String = "VidLink"
-
-    // Loading and error state for AdBlockerWebViewClient
-    private var isPageLoading = true
-    private var hasPageError = false
-
-    // Watch history tracking variables
-    private var currentTmdbId: Int = -1
-    private var currentIsTv: Boolean = false
-    private var currentTitle: String = "Unknown"
-    private var currentOverview: String? = null
-    private var currentPosterPath: String? = null
-    private var currentBackdropPath: String? = null
-    private var currentVoteAverage: Double = 0.0
-    private var currentReleaseDate: String? = null
-    private var currentPlaybackPosition: Long = 0L
-    private var isMediaInWatchHistory: Boolean = false
 
     // 15-second progress update handler
     private val progressUpdateHandler = Handler(Looper.getMainLooper())
     private val progressUpdateRunnable = Runnable { updateWatchProgress() }
+        updateWatchProgress()
+    }
     private val repository = TmdbRepository()
 
-    companion object {
-        private const val TAG = "VideasyPlayer"
-        private const val PROGRESS_INTERVAL_MS = 15_000L
-    }
-
-    // ── Cursor hide timer ──────────────────────────────────────────────────────
-    private val cursorHideHandler = Handler(Looper.getMainLooper())
-    private val cursorHideRunnable = Runnable {
-        if (!isCursorDisabled) {
-            cursorView.animate().alpha(0f).setDuration(500).start()
-        }
-    }
-
-    /**
-     * Check if the device is an Amazon Fire TV or Fire Stick.
      */
     private fun isFireTVDevice(context: Context): Boolean {
         val isFireTvHardware = context.packageManager.hasSystemFeature("amazon.hardware.fire_tv")
@@ -90,91 +32,37 @@ class PlayerActivity : AppCompatActivity() {
         return isFireTvHardware || isFireTvModel
     }
 
+    companion object {
+        private const val TAG = "VideasyPlayer"
+        private const val PROGRESS_INTERVAL_MS = 15_000L
+    }
+
+    // ── Cursor hide timer ──────────────────────────────────────────────────────
+        }
+    }
+
+    /**
+     * Check if the device is an Amazon Fire TV or Fire Stick.
+     */
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Fix: Missing Translucent Window Format
-        // Fire TV's window manager often requires the Activity's window to be explicitly set
+        // Fire TV's window manager often requires the Activity's window to be explicitly set 
         // to a translucent format to correctly composite the video surface with the WebView UI.
         window.setFormat(PixelFormat.TRANSLUCENT)
 
-        val tmdbId = intent.getIntExtra("TMDB_ID", -1)
-        val isTv = intent.getBooleanExtra("IS_TV", false)
-        currentSeason = intent.getIntExtra("SEASON_NUMBER", 1)
-        currentEpisode = intent.getIntExtra("EPISODE_NUMBER", 1)
-
-        val contentTitle = intent.getStringExtra("TITLE") ?: "Unknown"
-        val contentOverview = intent.getStringExtra("OVERVIEW")
-        val contentPosterPath = intent.getStringExtra("POSTER_PATH")
-        val contentBackdropPath = intent.getStringExtra("BACKDROP_PATH")
-        val contentVoteAverage = intent.getDoubleExtra("VOTE_AVERAGE", 0.0)
-        val contentReleaseDate = intent.getStringExtra("RELEASE_DATE")
-
-        if (tmdbId == -1) {
-            finish()
-            return
-        }
-
-        currentTmdbId = tmdbId
-        currentIsTv = isTv
-        currentTitle = contentTitle
-        currentOverview = contentOverview
-        currentPosterPath = contentPosterPath
-        currentBackdropPath = contentBackdropPath
-        currentVoteAverage = contentVoteAverage
-        currentReleaseDate = contentReleaseDate
-
-        checkAndAddToWatchHistory()
-        startProgressUpdateTimer()
-
-        val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
-        val deviceModel = Build.MODEL
-        val deviceBrand = Build.BRAND.replaceFirstChar { it.uppercase() }
-
-        if (uiModeManager.currentModeType != Configuration.UI_MODE_TYPE_TELEVISION) {
-            isCursorDisabled = true
-            val deviceType = if (uiModeManager.currentModeType == Configuration.UI_MODE_TYPE_NORMAL) "Mobile" else "Tablet"
-            Log.i(TAG, "[Device] $deviceType detected (${deviceBrand} $deviceModel), disabling cursor")
-        } else {
-            isFireTV = isFireTVDevice(this)
-            Log.i(TAG, "[Device] TV detected (${deviceBrand} $deviceModel), cursor enabled, isFireTV=$isFireTV")
-        }
-
-        val url: String = intent.getStringExtra("STREAM_URL") ?: if (isTv) {
-            "https://vidlink.pro/tv/$tmdbId/$currentSeason/$currentEpisode?autoplay=true"
-        } else {
-            "https://vidlink.pro/movie/$tmdbId?autoplay=true"
-        }
-
-        currentProviderName = WebViewUtils.detectProviderFromUrl(url)
-        Log.i(TAG, "[Provider] Selected: $currentProviderName")
-
-        rootLayout = FrameLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        webView = WebViewUtils.createWebView(this, isFireTV).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
             )
 
             // Fix: Solid Background Color Overlapping Video
             // On many Fire OS versions, the video is rendered on a SurfaceView that sits behind
             // the WebView's main drawing layer. Setting a solid black background hides the video.
             setBackgroundColor(0x00000000) // Set to transparent
-
+            
             // Fix: Amazon Chromium WebView vs. System WebView
             // Enable debugging for Amazon Chromium WebView optimizations
             if (isFireTV) {
-                WebView.setWebContentsDebuggingEnabled(true)
-            }
-
-            settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 databaseEnabled = true
@@ -183,22 +71,23 @@ class PlayerActivity : AppCompatActivity() {
                 mediaPlaybackRequiresUserGesture = false
                 allowFileAccess = true
                 allowContentAccess = true
-
                 // Viewport scaling
                 loadWithOverviewMode = true
                 useWideViewPort = true
-
+                
                 // FIX: Changed zoom constraints to allow video players to properly resize video layouts.
                 // We disable visual buttons (displayZoomControls) so it stays clean.
                 builtInZoomControls = false  // True on phones/tablets, False on TV (removes visual artifacts)
-                displayZoomControls = false  // Keeps UI completely clean of ugly +/- buttons
+                displayZoomControls = false       // Keeps UI completely clean of ugly +/- buttons
                 setSupportZoom(true)         // Allows standard devices to stretch cinematic views if needed
 
                 // FIX: Multi-window support must be TRUE for standard HTML5 video elements
+                
+                // FIX: Multi-window support must be TRUE for standard HTML5 video elements 
                 // to scale up and trigger full-screen player states natively.
                 setSupportMultipleWindows(true)
                 javaScriptCanOpenWindowsAutomatically = true // Allows player scripts to execute properly
-
+                
                 // Security layer bypass for http:// streaming streams running on https:// pages
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
@@ -209,139 +98,46 @@ class PlayerActivity : AppCompatActivity() {
                 userAgentString = if (isFireTV) {
                     "Mozilla/5.0 (Linux; Android 9; AFTMM Build/PS7233) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 } else {
-                    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                }
-            }
-
-            isHorizontalScrollBarEnabled = false
-            isVerticalScrollBarEnabled = false
-            setScrollBarStyle(View.SCROLLBARS_OUTSIDE_OVERLAY)
-            overScrollMode = View.OVER_SCROLL_NEVER
-
-            webViewClient = AdBlockerWebViewClient(
-                onPageFinished = {
-                    isPageLoading = false
-                    Log.i(TAG, "[WebView] Page finished loading with AdBlocker")
-                },
-                onError = {
-                    hasPageError = true
-                    isPageLoading = false
-                    Log.e(TAG, "[WebView] Error received with AdBlocker")
-                }
-            )
-
-            webChromeClient = object : WebChromeClient() {
-                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                    super.onShowCustomView(view, callback)
                     Log.i(TAG, "[WebChrome] onShowCustomView called")
                 }
 
                 override fun onCreateWindow(
                     view: WebView?,
                     isDialog: Boolean,
-                    isUserGesture: Boolean,
-                    resultMsg: Message?
-                ): Boolean {
-                    Log.i(TAG, "[WebChrome] onCreateWindow called, blocking popups")
-                    return false
-                }
-
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    super.onProgressChanged(view, newProgress)
                     Log.d(TAG, "[WebChrome] Load progress: $newProgress%")
                 }
             }
 
             val iframeHtml = intent.getStringExtra("IFRAME_HTML")
             if (iframeHtml != null) {
-                val baseUrl = StreamProviderManager.getBaseUrl(currentProviderName)
-                loadDataWithBaseURL(baseUrl, iframeHtml, "text/html", "UTF-8", null)
-            } else {
-                loadUrl(url)
             }
         }
 
-        // PlayerBridge: receives postMessage events from the tracking script injected in the
         // iframe HTML. Updates in-memory position (movies) and position + season/episode (TV).
         // The 15-second timer handles the actual DB + Firebase write — bridge only updates state.
         webView.addJavascriptInterface(
             PlayerBridge { _, positionSec, season, episode ->
                 runOnUiThread {
-                    // Always update playback position (movies and TV)
+                    // Update current position from player (don't save yet - timer handles DB save)
                     currentPlaybackPosition = (positionSec * 1000).toLong()
 
                     if (currentIsTv) {
-                        // TV: update season/episode if the player reported a change
-                        if (season != null && episode != null) {
                             if (season != currentSeason || episode != currentEpisode) {
-                                Log.i(TAG, "[TV] Episode changed: S${currentSeason}E${currentEpisode} -> S${season}E${episode}")
-                                currentSeason = season
                                 currentEpisode = episode
                             }
+                    // Update season/episode if provided (TV shows)
+                    if (season != null && episode != null && currentIsTv) {
+                        if (season != currentSeason || episode != currentEpisode) {
+                            Log.i(TAG, "[Episode] Changed S${currentSeason}E${currentEpisode} -> S${season}E${episode}")
+                            currentSeason = season
+                            currentEpisode = episode
                         }
-                        Log.d(TAG, "[TV] Position updated: ${positionSec}s | S${currentSeason}E${currentEpisode}")
-                    } else {
-                        Log.d(TAG, "[Movie] Position updated: ${positionSec}s")
                     }
                 }
             },
-            "MavisInterface"
-        )
-
-        cursorView = MouseCursorView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
-        }
-
-        rootLayout.addView(webView)
-        if (!isCursorDisabled) {
-            rootLayout.addView(cursorView)
-            cursorView.bringToFront()
-        }
-
-        setContentView(rootLayout)
-        rootLayout.isFocusable = true
-        rootLayout.isFocusableInTouchMode = true
-        rootLayout.requestFocus()
-
-        rootLayout.post {
-            screenWidth = rootLayout.width
-            screenHeight = rootLayout.height
-            if (!isCursorDisabled) {
-                cursorX = screenWidth / 2f
-                cursorY = screenHeight / 2f
-                updateCursorPosition()
-                showCursorAndResetTimer()
-            }
-        }
-
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                showExitConfirmationDialog()
-            }
-        })
-    }
-
-    private fun showExitConfirmationDialog() {
-        QuitDialog(
-            context = this,
-            title = "Stop Playback?",
-            message = "Are you sure you want to stop playback and exit?",
-            positiveButtonText = "Stop",
-            negativeButtonText = "Continue",
-            lottieAnimRes = R.raw.exit,
-            onNo = { },
-            onYes = { finish() }
-        ).show()
-    }
-
-    override fun onResume() {
         super.onResume()
         webView.onResume()
         webView.resumeTimers()
-        startProgressUpdateTimer() // Restart timer after returning from background
     }
 
     override fun onPause() {
@@ -350,114 +146,10 @@ class PlayerActivity : AppCompatActivity() {
         stopProgressUpdateTimer()
         webView.onPause()
         webView.pauseTimers()
+        stopProgressUpdateTimer()
     }
 
     override fun onDestroy() {
-        stopProgressUpdateTimer()
-        cursorHideHandler.removeCallbacks(cursorHideRunnable)
-
-        if (::webView.isInitialized) {
-            try {
-                (webView.parent as? ViewGroup)?.removeView(webView)
-                webView.apply {
-                    stopLoading()
-                    webChromeClient = WebChromeClient()
-                    webViewClient = WebViewClient()
-                    clearHistory()
-                    clearCache(true)
-                    loadUrl("about:blank")
-                    onPause()
-                    removeAllViews()
-                    destroy()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during WebView cleanup: ${e.message}")
-            }
-        }
-        super.onDestroy()
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (isCursorDisabled) return super.dispatchKeyEvent(event)
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP,
-                KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_LEFT,
-                KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER -> return onKeyDown(event.keyCode, event)
-            }
-        }
-        return super.dispatchKeyEvent(event)
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (isCursorDisabled) return super.onKeyDown(keyCode, event)
-        return when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                cursorY = (cursorY - moveSpeed).coerceAtLeast(0f)
-                updateCursorPosition()
-                showCursorAndResetTimer()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                cursorY = (cursorY + moveSpeed).coerceAtMost(screenHeight.toFloat())
-                updateCursorPosition()
-                showCursorAndResetTimer()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                cursorX = (cursorX - moveSpeed).coerceAtLeast(0f)
-                updateCursorPosition()
-                showCursorAndResetTimer()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                cursorX = (cursorX + moveSpeed).coerceAtMost(screenWidth.toFloat())
-                updateCursorPosition()
-                showCursorAndResetTimer()
-                true
-            }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                simulateClick(cursorX, cursorY)
-                showCursorAndResetTimer()
-                true
-            }
-            else -> super.onKeyDown(keyCode, event)
-        }
-    }
-
-    private fun updateCursorPosition() {
-        if (isCursorDisabled) return
-        cursorView.x = cursorX
-        cursorView.y = cursorY
-        cursorView.bringToFront()
-        cursorView.invalidate()
-    }
-
-    private fun simulateClick(x: Float, y: Float) {
-        val downTime = SystemClock.uptimeMillis()
-        val eventTime = SystemClock.uptimeMillis()
-
-        val downEvent = MotionEvent.obtain(downTime, eventTime, MotionEvent.ACTION_DOWN, x, y, 0)
-        val upEvent = MotionEvent.obtain(downTime, eventTime + 100, MotionEvent.ACTION_UP, x, y, 0)
-
-        downEvent.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-        upEvent.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-
-        window.decorView.dispatchTouchEvent(downEvent)
-        window.decorView.dispatchTouchEvent(upEvent)
-
-        downEvent.recycle()
-        upEvent.recycle()
-    }
-
-    private fun showCursorAndResetTimer() {
-        if (isCursorDisabled) return
-        cursorView.animate().cancel()
-        cursorView.alpha = 1f
-        cursorHideHandler.removeCallbacks(cursorHideRunnable)
         cursorHideHandler.postDelayed(cursorHideRunnable, 5000)
     }
 
@@ -476,37 +168,22 @@ class PlayerActivity : AppCompatActivity() {
                     val watchHistoryItem = WatchHistoryItem(
                         id = currentTmdbId,
                         title = currentTitle,
-                        overview = currentOverview,
-                        posterPath = currentPosterPath,
-                        backdropPath = currentBackdropPath,
-                        voteAverage = currentVoteAverage,
-                        releaseDate = currentReleaseDate,
-                        isTv = currentIsTv,
-                        seasonNumber = if (currentIsTv) currentSeason else null,
-                        episodeNumber = if (currentIsTv) currentEpisode else null,
-                        lastWatched = System.currentTimeMillis(),
-                        playbackPosition = 0L
                     )
 
                     repository.saveToWatchHistory(this@PlayerActivity, watchHistoryItem)
+                    Log.d(TAG, "[WatchHistory] saveToWatchHistory called successfully")
 
                     FirebaseManager.syncWatchHistory(
+                    com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.syncWatchHistory(
                         tmdbId = currentTmdbId,
                         isTv = currentIsTv,
                         seasonNumber = if (currentIsTv) currentSeason else null,
-                        episodeNumber = if (currentIsTv) currentEpisode else null,
-                        playbackPosition = 0L,
-                        duration = 0L,
-                        title = currentTitle,
-                        overview = currentOverview,
-                        posterPath = currentPosterPath,
-                        backdropPath = currentBackdropPath,
                         voteAverage = currentVoteAverage,
                         releaseDate = currentReleaseDate
                     )
+                    Log.d(TAG, "[WatchHistory] Media already in watch history, skipping insert")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "[WatchHistory] Error checking/adding to watch history: ${e.message}")
             }
         }
     }
@@ -517,87 +194,62 @@ class PlayerActivity : AppCompatActivity() {
         progressUpdateHandler.removeCallbacks(progressUpdateRunnable)
         progressUpdateHandler.postDelayed(progressUpdateRunnable, PROGRESS_INTERVAL_MS)
     }
-
-    private fun stopProgressUpdateTimer() {
         progressUpdateHandler.removeCallbacks(progressUpdateRunnable)
     }
 
-    /**
-     * Called by the timer every 15 seconds. Persists current state then reschedules.
      */
     private fun updateWatchProgress() {
-        persistWatchProgress()
-        progressUpdateHandler.postDelayed(progressUpdateRunnable, PROGRESS_INTERVAL_MS)
-    }
-
-    /**
-     * Writes the current playback state to the local DB and Firebase.
      *
      * Movies  → saves playback position only.
-     * TV      → saves playback position + current season + current episode.
-     *
-     * Snapshots all fields before the coroutine launches so mutations on the
-     * main thread during the IO dispatch cannot corrupt the values being saved.
-     */
     private fun persistWatchProgress() {
         if (currentTmdbId == -1) return
 
-        // Snapshot volatile state on the main thread before crossing to IO
-        val tmdbId       = currentTmdbId
-        val isTv         = currentIsTv
-        val position     = currentPlaybackPosition
-        val season       = if (isTv) currentSeason  else null
-        val episode      = if (isTv) currentEpisode else null
-        val title        = currentTitle
-        val overview     = currentOverview
-        val posterPath   = currentPosterPath
         val backdropPath = currentBackdropPath
         val voteAverage  = currentVoteAverage
         val releaseDate  = currentReleaseDate
-
-        lifecycleScope.launch(Dispatchers.IO) {
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                if (isTv) {
-                    // Update position and episode info together for TV shows
-                    repository.updatePlaybackPosition(
-                        mediaId   = tmdbId,
-                        mediaType = "tv",
-                        position  = position
-                    )
+                repository.updatePlaybackPosition(
+                    mediaId = currentTmdbId,
+                    mediaType = if (currentIsTv) "tv" else "movie",
+                    position = currentPlaybackPosition
+
+                if (currentIsTv) {
                     repository.updateEpisodeInfo(
-                        mediaId       = tmdbId,
-                        mediaType     = "tv",
-                        seasonNumber  = season!!,
-                        episodeNumber = episode!!
-                    )
-                    Log.d(TAG, "[TV] Persisted S${season}E${episode} @ ${position}ms")
-                } else {
-                    // Update position only for movies
-                    repository.updatePlaybackPosition(
-                        mediaId   = tmdbId,
-                        mediaType = "movie",
                         position  = position
+                        mediaId = currentTmdbId,
+                        mediaType = "tv",
+                        seasonNumber = currentSeason,
+                        episodeNumber = currentEpisode
                     )
-                    Log.d(TAG, "[Movie] Persisted position @ ${position}ms")
                 }
 
-                FirebaseManager.syncWatchHistory(
-                    tmdbId           = tmdbId,
-                    isTv             = isTv,
-                    seasonNumber     = season,
-                    episodeNumber    = episode,
-                    playbackPosition = position,
-                    duration         = 0L,
-                    title            = title,
                     overview         = overview,
-                    posterPath       = posterPath,
                     backdropPath     = backdropPath,
                     voteAverage      = voteAverage,
-                    releaseDate      = releaseDate
+                com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.syncWatchHistory(
+                    tmdbId = currentTmdbId,
+                    isTv = currentIsTv,
+                    seasonNumber = if (currentIsTv) currentSeason else null,
+                    episodeNumber = if (currentIsTv) currentEpisode else null,
+                    playbackPosition = currentPlaybackPosition,
+                    duration = 0L,
+                    title = currentTitle,
+                    overview = currentOverview,
+                    posterPath = currentPosterPath,
+                    backdropPath = currentBackdropPath,
+                    voteAverage = currentVoteAverage,
+                    releaseDate = currentReleaseDate
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "[WatchHistory] Error persisting progress: ${e.message}")
             }
         }
+    }
+
+    private fun updateWatchProgress() {
+        // Timer-based sync - uses the current position already set by PlayerBridge
+        persistWatchProgress()
+        progressUpdateHandler.postDelayed(progressUpdateRunnable, 15000)
     }
 }
