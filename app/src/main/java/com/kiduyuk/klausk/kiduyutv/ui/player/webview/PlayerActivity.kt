@@ -29,6 +29,7 @@ import com.kiduyuk.klausk.kiduyutv.util.QuitDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PlayerActivity : AppCompatActivity() {
 
@@ -61,7 +62,6 @@ class PlayerActivity : AppCompatActivity() {
     private var currentVoteAverage: Double = 0.0
     private var currentReleaseDate: String? = null
     private var currentPlaybackPosition: Long = 0L
-    private var isMediaInWatchHistory: Boolean = false
 
     // 15-second progress update handler
     private val progressUpdateHandler = Handler(Looper.getMainLooper())
@@ -126,8 +126,8 @@ class PlayerActivity : AppCompatActivity() {
         currentVoteAverage = contentVoteAverage
         currentReleaseDate = contentReleaseDate
 
+        // Check and add to watch history, timer will be started after check completes
         checkAndAddToWatchHistory()
-        startProgressUpdateTimer()
 
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
         val deviceModel = Build.MODEL
@@ -460,14 +460,15 @@ class PlayerActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 Log.d(TAG, "[WatchHistory] Checking if media is in watch history: id=$currentTmdbId, isTv=$currentIsTv")
-                isMediaInWatchHistory = repository.isInWatchHistory(
+                
+                // Check synchronously before deciding to add
+                val alreadyInHistory = repository.isInWatchHistory(
                     this@PlayerActivity,
                     currentTmdbId,
                     currentIsTv
                 )
-                Log.d(TAG, "[WatchHistory] isMediaInWatchHistory=$isMediaInWatchHistory")
-
-                if (!isMediaInWatchHistory) {
+                
+                if (!alreadyInHistory) {
                     Log.d(TAG, "[WatchHistory] Adding to watch history: id=$currentTmdbId, title=$currentTitle, isTv=$currentIsTv, season=$currentSeason, episode=$currentEpisode")
                     val watchHistoryItem = WatchHistoryItem(
                         id = currentTmdbId,
@@ -486,6 +487,11 @@ class PlayerActivity : AppCompatActivity() {
 
                     repository.saveToWatchHistory(this@PlayerActivity, watchHistoryItem)
                     Log.d(TAG, "[WatchHistory] saveToWatchHistory called successfully")
+                    
+                    // Start progress timer only after adding to history
+                    withContext(Dispatchers.Main) {
+                        startProgressUpdateTimer()
+                    }
 
                     com.kiduyuk.klausk.kiduyutv.util.FirebaseManager.syncWatchHistory(
                         tmdbId = currentTmdbId,
@@ -502,10 +508,18 @@ class PlayerActivity : AppCompatActivity() {
                         releaseDate = currentReleaseDate
                     )
                 } else {
-                    Log.d(TAG, "[WatchHistory] Media already in watch history, skipping insert")
+                    Log.d(TAG, "[WatchHistory] Media already in watch history, starting timer anyway")
+                    // Start timer even if already in history (for resume functionality)
+                    withContext(Dispatchers.Main) {
+                        startProgressUpdateTimer()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "[WatchHistory] Error checking/adding to watch history: ${e.message}", e)
+                // Still start timer on error to enable progress tracking
+                withContext(Dispatchers.Main) {
+                    startProgressUpdateTimer()
+                }
             }
         }
     }
