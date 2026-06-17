@@ -1072,64 +1072,117 @@ private fun AppVersionContent(
                     lineHeight = 20.sp
                 )
 
-                // Check for Updates Button
-                val interactionSource = remember { MutableInteractionSource() }
-                val isFocused by interactionSource.collectIsFocusedAsState()
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            when {
-                                isCheckingForUpdates || isDownloadingUpdate -> PrimaryRed.copy(alpha = 0.5f)
-                                isFocused -> PrimaryRed.copy(alpha = 0.8f)
-                                else -> PrimaryRed
-                            }
-                        )
-                        .border(
-                            width = if (isFocused) 2.dp else 0.dp,
-                            color = if (isFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null,
-                            enabled = !isCheckingForUpdates && !isDownloadingUpdate,
-                            onClick = onCheckForUpdatesClick
-                        )
-                        .focusable(interactionSource = interactionSource)
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
-                    contentAlignment = Alignment.Center
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Check for Updates Button
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isFocused by interactionSource.collectIsFocusedAsState()
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                when {
+                                    isCheckingForUpdates || isDownloadingUpdate -> PrimaryRed.copy(alpha = 0.5f)
+                                    isFocused -> PrimaryRed.copy(alpha = 0.8f)
+                                    else -> PrimaryRed
+                                }
+                            )
+                            .border(
+                                width = if (isFocused) 2.dp else 0.dp,
+                                color = if (isFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null,
+                                enabled = !isCheckingForUpdates && !isDownloadingUpdate,
+                                onClick = onCheckForUpdatesClick
+                            )
+                            .focusable(interactionSource = interactionSource)
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (isCheckingForUpdates) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                text = "Checking...",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Update,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Check for Updates",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (isCheckingForUpdates) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Text(
+                                    text = "Checking...",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Update,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Check for Updates",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    // Download Update Button (shown when update is available)
+                    if (updateAvailable && !isDownloadingUpdate) {
+                        val downloadInteractionSource = remember { MutableInteractionSource() }
+                        val downloadFocused by downloadInteractionSource.collectIsFocusedAsState()
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    when {
+                                        downloadFocused -> Color(0xFF4CAF50).copy(alpha = 0.8f)
+                                        else -> Color(0xFF4CAF50)
+                                    }
+                                )
+                                .border(
+                                    width = if (downloadFocused) 2.dp else 0.dp,
+                                    color = if (downloadFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable(
+                                    interactionSource = downloadInteractionSource,
+                                    indication = null,
+                                    onClick = onDownloadUpdateClick
+                                )
+                                .focusable(interactionSource = downloadInteractionSource)
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Download Update",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
@@ -1164,54 +1217,6 @@ private fun AppVersionContent(
                             color = PrimaryRed,
                             trackColor = TextTertiary.copy(alpha = 0.3f),
                         )
-                    }
-                }
-
-                // Download Update Button (shown when update is available)
-                if (updateAvailable && !isDownloadingUpdate) {
-                    val downloadInteractionSource = remember { MutableInteractionSource() }
-                    val downloadFocused by downloadInteractionSource.collectIsFocusedAsState()
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                when {
-                                    downloadFocused -> Color(0xFF4CAF50).copy(alpha = 0.8f)
-                                    else -> Color(0xFF4CAF50)
-                                }
-                            )
-                            .border(
-                                width = if (downloadFocused) 2.dp else 0.dp,
-                                color = if (downloadFocused) Color.White.copy(alpha = 0.5f) else Color.Transparent,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .clickable(
-                                interactionSource = downloadInteractionSource,
-                                indication = null,
-                                onClick = onDownloadUpdateClick
-                            )
-                            .focusable(interactionSource = downloadInteractionSource)
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Download Update",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
                     }
                 }
             }
