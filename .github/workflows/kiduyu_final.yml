@@ -31,16 +31,7 @@ jobs:
         with:
           distribution: 'jetbrains'
           java-version: '17'
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
+          cache: 'gradle'
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -138,10 +129,9 @@ jobs:
       - name: Restore keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > kiduyutv_final
 
-      # ── Phone Release ─────────────────────────────────────────
-      # ── Phone Release ─────────────────────────────────────────
-      - name: Build Phone Release APK
-        run: ./gradlew assemblePhoneRelease
+      # ── Release APKs ──────────────────────────────────────────
+      - name: Build Phone + TV Release APKs
+        run: ./gradlew assemblePhoneRelease assembleTvRelease --build-cache --configuration-cache --parallel
 
       - name: Rename Phone Release APK
         id: rename_phone_release
@@ -161,10 +151,6 @@ jobs:
           path: ${{ steps.rename_phone_release.outputs.apk_path }}
 
       # ── TV Release ────────────────────────────────────────────
-      # ── TV Release ────────────────────────────────────────────
-      - name: Build TV Release APK
-        run: ./gradlew assembleTvRelease
-
       - name: Rename TV Release APK
         id: rename_tv_release
         run: |

@@ -227,7 +227,7 @@ class SplashActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // ── First: Check if device version matches Firebase app_info ─────────────────
-        //checkDeviceVersionFromFirebase()
+        checkDeviceVersionFromFirebase()
 
         // Set up the Compose UI first so Compose owns android.R.id.content before
         // any third-party SDK (UMP/ConsentManager, AdManager, Firebase) has a chance
@@ -297,9 +297,15 @@ class SplashActivity : ComponentActivity() {
                     }
                 }
 
-                override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
+                override fun onCancelled(error: DatabaseError) {
                     Log.e(TAG, "Failed to fetch app_info from Firebase: ${error.message}")
-                    // Continue anyway - don't block app if Firebase is unreachable
+
+                    // Continue app startup even if Firebase fails
+                    Toast.makeText(
+                        this@SplashActivity,
+                        "Version check unavailable",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             })
     }
