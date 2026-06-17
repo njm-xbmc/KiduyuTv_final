@@ -12,6 +12,7 @@ import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.database.FirebaseDatabase
 import com.kiduyuk.klausk.kiduyutv.data.api.ApiClient
 import com.kiduyuk.klausk.kiduyutv.data.local.database.DatabaseManager
+import com.kiduyuk.klausk.kiduyutv.data.model.StreamProviderManager
 import com.kiduyuk.klausk.kiduyutv.data.repository.MyListManager
 import com.kiduyuk.klausk.kiduyutv.network.AndroidApp
 import com.kiduyuk.klausk.kiduyutv.network.NetworkConnectivityChecker
@@ -83,6 +84,9 @@ class KiduyuTvApp : MultiDexApplication(), ImageLoaderFactory {
 
         // Initialize Trakt auth state early so persisted sessions are available app-wide.
         TraktAuthManager.init(this)
+
+        // Load stream provider configuration from Firebase, with local fallbacks.
+        StreamProviderManager.startFirebaseSync()
 
         // Initialize AndroidApp reference for singleton access
         AndroidApp.instance = this

@@ -1,5 +1,11 @@
 package com.kiduyuk.klausk.kiduyutv.data.model
 
+import android.util.Log
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+
 /**
  * Stream provider configuration
  */
@@ -19,7 +25,12 @@ data class StreamProvider(
  */
 object StreamProviderManager {
 
-    val providers = listOf(
+    private const val TAG = "StreamProviderManager"
+    private const val PROVIDERS_CONFIG_PATH = "app_config/stream_providers_Configuration"
+
+    private var firebaseListener: ValueEventListener? = null
+
+    private val fallbackProviders = listOf(
         // ═══════════════════════════════════════════════════════════════
         // 1. Videasy - with frameborder
         // ═══════════════════════════════════════════════════════════════
@@ -543,6 +554,132 @@ object StreamProviderManager {
             tvUrlTemplate = "https://vidsrc.wtf/api/1/tv/?id=%d&s=%d&e=%d",
             isPhoneOnly = true
         )
+    )
+
+    @Volatile
+    var providers: List<StreamProvider> = fallbackProviders
+        private set
+
+    /**
+     * Starts a realtime listener for app_config/stream_providers_Configuration.
+     * The hardcoded provider list remains the fallback if Firebase is empty,
+     * disabled, malformed, or temporarily unreachable.
+     */
+    fun startFirebaseSync() {
+        if (firebaseListener != null) return
+
+        val ref = FirebaseDatabase.getInstance().getReference(PROVIDERS_CONFIG_PATH)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val remoteProviders = parseProviders(snapshot)
+                if (remoteProviders.isNotEmpty()) {
+                    providers = remoteProviders
+                    Log.i(TAG, "Loaded ${remoteProviders.size} stream providers from Firebase")
+                } else {
+                    providers = fallbackProviders
+                    Log.w(TAG, "Firebase stream provider config empty; using fallback providers")
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                providers = fallbackProviders
+                Log.w(TAG, "Failed to load stream providers from Firebase: ${error.message}")
+            }
+        }
+
+        firebaseListener = listener
+        ref.addValueEventListener(listener)
+    }
+
+    fun stopFirebaseSync() {
+        val listener = firebaseListener ?: return
+        FirebaseDatabase.getInstance()
+            .getReference(PROVIDERS_CONFIG_PATH)
+            .removeEventListener(listener)
+        firebaseListener = null
+    }
+
+    private fun parseProviders(snapshot: DataSnapshot): List<StreamProvider> {
+        val fallbackOrder = fallbackProviders
+            .mapIndexed { index, provider -> provider.name.lowercase() to index }
+            .toMap()
+
+        return snapshot.children
+            .mapIndexedNotNull { index, child ->
+                parseProvider(child)
+                    ?.let { ParsedProvider(it, fallbackOrder[it.name.lowercase()] ?: (fallbackProviders.size + index)) }
+            }
+            .sortedBy { it.order }
+            .map { it.provider }
+    }
+
+    private fun parseProvider(snapshot: DataSnapshot): StreamProvider? {
+        val enabled = snapshot.child("enabled").getValue(Boolean::class.java) ?: true
+        if (!enabled) return null
+
+        val name = snapshot.child("stream_provider_name").getValue(String::class.java)
+            ?.takeIf { it.isNotBlank() }
+            ?: snapshot.key
+            ?: return null
+        val movieUrlTemplate = snapshot.child("movie_url_template").getValue(String::class.java)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val tvUrlTemplate = snapshot.child("tv_url_template").getValue(String::class.java)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+
+        val matchingFallback = fallbackProviders.find { it.name.equals(name, ignoreCase = true) }
+        val iframeAttributes = snapshot.child("iframe_attributes").toStringMap()
+        val allowAttributes = snapshot.child("allow_attributes").getValue(String::class.java)
+            ?.takeIf { it.isNotBlank() }
+            ?: matchingFallback?.allowAttributes
+            ?: "autoplay; encrypted-media; picture-in-picture"
+        val movieParameterMap = snapshot.child("movie_parameters").toStringMap()
+        val tvParameterMap = snapshot.child("tv_parameters").toStringMap()
+        val isPhoneOnly = snapshot.child("is_phone_only").getValue(Boolean::class.java)
+            ?: snapshot.child("phone_only").getValue(Boolean::class.java)
+            ?: matchingFallback?.isPhoneOnly
+            ?: false
+
+        return StreamProvider(
+            name = name,
+            movieUrlTemplate = movieUrlTemplate,
+            tvUrlTemplate = tvUrlTemplate,
+            iframeAttributes = iframeAttributes.ifEmpty { matchingFallback?.iframeAttributes ?: emptyMap() },
+            allowAttributes = allowAttributes,
+            movieParameters = { tmdbId, timestamp ->
+                val fallbackParams = matchingFallback?.movieParameters?.invoke(tmdbId, timestamp).orEmpty()
+                mergeParameterMaps(fallbackParams, movieParameterMap)
+            },
+            tvParameters = { tmdbId, season, episode, timestamp ->
+                val fallbackParams = matchingFallback?.tvParameters?.invoke(tmdbId, season, episode, timestamp).orEmpty()
+                mergeParameterMaps(fallbackParams, tvParameterMap)
+            },
+            isPhoneOnly = isPhoneOnly
+        )
+    }
+
+    private fun DataSnapshot.toStringMap(): Map<String, String> {
+        if (!exists()) return emptyMap()
+        return children.mapNotNull { child ->
+            val key = child.key ?: return@mapNotNull null
+            val value = child.value?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            key to value
+        }.toMap()
+    }
+
+    private fun mergeParameterMaps(
+        fallbackParams: Map<String, String>,
+        firebaseParams: Map<String, String>
+    ): Map<String, String> {
+        if (fallbackParams.isEmpty()) return firebaseParams
+        if (firebaseParams.isEmpty()) return fallbackParams
+        return fallbackParams.toMutableMap().apply { putAll(firebaseParams) }
+    }
+
+    private data class ParsedProvider(
+        val provider: StreamProvider,
+        val order: Int
     )
 
     /**

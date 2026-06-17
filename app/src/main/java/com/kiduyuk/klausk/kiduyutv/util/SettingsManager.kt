@@ -75,6 +75,7 @@ class SettingsManager(context: Context) {
          * All active providers in display order.
          * Uses the first 10 providers from StreamProviderManager for consistency.
          */
-        val PROVIDERS: List<String> = StreamProviderManager.providers.take(10).map { it.name }
+        val PROVIDERS: List<String>
+            get() = StreamProviderManager.providers.take(10).map { it.name }
     }
 }
