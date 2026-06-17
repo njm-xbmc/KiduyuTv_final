@@ -9,7 +9,6 @@ import com.kiduyuk.klausk.kiduyutv.data.model.MovieDetail
 import com.kiduyuk.klausk.kiduyutv.data.model.TvShowDetail
 import com.kiduyuk.klausk.kiduyutv.data.model.WatchHistoryItem
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
@@ -367,9 +366,8 @@ object WatchHistoryEnricher {
         DatabaseManager.init(context)
 
         return try {
-            val dao = DatabaseManager.watchHistoryDao()
             withContext(Dispatchers.IO) {
-                dao.getContinueWatching(20).first().map {
+                DatabaseManager.getAllWatchHistoryItems().map {
                     DatabaseManager.entityToWatchHistoryItem(it)
                 }
             }
