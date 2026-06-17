@@ -63,8 +63,7 @@ interface WatchHistoryDao {
      * The query sorts by lastWatchedTimestamp to show most recently accessed items first.
      */
     @Query("""
-        SELECT * FROM watch_history 
-        WHERE playbackPosition > 0 OR lastWatchedTimestamp > 0
+        SELECT * FROM watch_history
         ORDER BY lastWatchedTimestamp DESC 
         LIMIT :limit
     """)

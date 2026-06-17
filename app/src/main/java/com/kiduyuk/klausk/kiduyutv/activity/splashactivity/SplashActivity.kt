@@ -63,6 +63,7 @@ import io.github.cutelibs.cutedialog.CuteDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.core.net.toUri
 
 @SuppressLint("CustomSplashScreen")
 class SplashActivity : ComponentActivity() {
@@ -279,12 +280,12 @@ class SplashActivity : ComponentActivity() {
 
         Log.i(TAG, "Checking device version: isTv=$isTvDevice, checking $expectedVersionKey")
 
-        FirebaseManager.getFirebaseDatabaseInstance()
+            FirebaseManager.getFirebaseDatabaseInstance()
             .getReference("app_config/app_info/$expectedVersionKey")
             .addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
                 override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
                     val expectedVersion = snapshot.getValue(String::class.java)
-                    val currentPackage = packageName
+                    val currentPackage = BuildConfig.APPLICATION_ID
 
                     Log.i(TAG, "Firebase $expectedVersionKey: $expectedVersion, Current package: $currentPackage")
 
@@ -296,11 +297,7 @@ class SplashActivity : ComponentActivity() {
                     }
                 }
 
-                override fun onCancelled(error: DatabaseError) {
-                    TODO("Not yet implemented")
-                }
-
-                fun onError (error: DatabaseError) {
+                override fun onCancelled(error: com.google.firebase.database.DatabaseError) {
                     Log.e(TAG, "Failed to fetch app_info from Firebase: ${error.message}")
                     // Continue anyway - don't block app if Firebase is unreachable
                 }
@@ -488,7 +485,7 @@ class SplashActivity : ComponentActivity() {
                             startActivity(
                                 Intent(
                                     Intent.ACTION_VIEW,
-                                    Uri.parse("https://github.com/kiduyu-klaus/KiduyuTv_final/releases/latest")
+                                    "https://github.com/kiduyu-klaus/KiduyuTv_final/releases/latest".toUri()
                                 )
                             )
                         }
