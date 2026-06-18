@@ -18,7 +18,7 @@
 </div>
 <div align="center">
 
-<h3>📢 Stay updated — join the Telegram channel for new releases & updates</h3>
+<h3>📢 Stay updated — join the Telegram channel for new releases</h3>
 
 <a href="https://t.me/kiduyutv">
   <img src="https://img.shields.io/badge/Join%20on%20Telegram-%40kiduyutv-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Join KiduyuTV on Telegram" height="50"/>
