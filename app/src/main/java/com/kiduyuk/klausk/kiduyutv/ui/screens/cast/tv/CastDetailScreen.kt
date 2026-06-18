@@ -616,6 +616,8 @@ private fun FocusableBiographySection(
 
 /**
  * Biography dialog showing full biography text.
+ * Sized to fill most of the screen so the user can comfortably read
+ * the complete biography without an inconveniently small scroll area.
  */
 @Composable
 private fun BiographyDialog(
@@ -623,40 +625,56 @@ private fun BiographyDialog(
     biography: String,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = CardDark,
-        shape = RoundedCornerShape(16.dp),
-        title = {
-            Text(
-                text = "$name's Biography",
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary
-            )
-        },
-        text = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 200.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            color = CardDark,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.85f)
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Title
                 Text(
-                    text = biography,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    text = "$name's Biography",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 12.dp)
                 )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "Close",
-                    color = PrimaryRed
-                )
+
+                // Scrollable biography body — shows the COMPLETE text
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp)
+                ) {
+                    Text(
+                        text = biography,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
+
+                // Close button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(
+                            text = "Close",
+                            color = PrimaryRed,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 /**

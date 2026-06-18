@@ -249,7 +249,8 @@ interface TmdbApiService {
     /** Fetches detailed information for a specific person. */
     @GET("person/{person_id}")
     suspend fun getPersonDetails(
-        @Path("person_id") personId: Int
+        @Path("person_id") personId: Int,
+        @Query("language") language: String = "en-US"
     ): PersonDetail
 
     /** Fetches images for a specific person. */
