@@ -9,7 +9,6 @@ jobs:
   build:
     name: Build Debug APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -27,12 +26,11 @@ jobs:
         run: chmod +x gradlew
 
       - name: Inject TMDB API key
-        run: |
-          echo "TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}" >> local.properties
+        run: echo "TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}" >> local.properties
 
-- name: Create dummy google-services.json
+      - name: Create dummy google-services.json
         run: |
-          cat > app/google-services.json << 'EOF'
+          cat > app/google-services.json << 'GSEOF'
           {
             "project_info": {
               "project_number": "000000000000",
@@ -65,7 +63,7 @@ jobs:
             ],
             "configuration_version": "1"
           }
-          EOF
+          GSEOF
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon
