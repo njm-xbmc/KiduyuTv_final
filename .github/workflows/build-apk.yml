@@ -25,6 +25,10 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Get version name
+        id: version
+        run: echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+
       - name: Inject TMDB API key
         run: echo "TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}" >> local.properties
 
@@ -79,9 +83,16 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: List APK outputs
+        run: find app/build/outputs/apk -name "*.apk" | sort
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: KiduyuTV-debug
-          path: app/build/outputs/apk/**/*.apk
-          retention-days: 30
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: app/build/outputs/apk/**/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
