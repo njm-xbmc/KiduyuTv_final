@@ -3,6 +3,7 @@ package com.kiduyuk.klausk.kiduyutv.ui.screens.cast.tv
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
@@ -47,6 +48,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.launch
 import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
 import com.kiduyuk.klausk.kiduyutv.data.repository.MyListManager
 import com.kiduyuk.klausk.kiduyutv.viewmodel.MyListItem
 import androidx.compose.material.icons.filled.Add
@@ -244,6 +247,7 @@ fun CastDetailScreen(
  * Content composable for the cast detail screen.
  * Uses a single Box with header at top (fixed with profile + overview) and scrollable grid below.
  */
+@RequiresApi(Build.VERSION_CODES.HONEYCOMB_MR2)
 @Composable
 private fun CastDetailContent(
     castMember: CastMember,

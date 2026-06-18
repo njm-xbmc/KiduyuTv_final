@@ -758,7 +758,7 @@ object StreamProviderManager {
                                 const provider = (p.type === 'anime' || p.type === 'tv' || p.type === 'movie') ? 'Videasy/Vidking' : '';
                                 const seasonVal = p.season !== undefined ? p.season : (currentIsTv ? currentSeason : null);
                                 const epVal = p.episode !== undefined ? p.episode : (currentIsTv ? currentEpisode : null);
-                                sendToAndroid(p.timestamp || 0, seasonVal, epVal, provider);
+                                sendToAndroid(p.timestamp || 0, p.duration || 0, seasonVal, epVal, provider);
                             }
                         } catch (e) {
                             // Not valid JSON string
@@ -773,7 +773,7 @@ object StreamProviderManager {
                             if (data.type === 'timeupdate' && data.data) {
                                 sendToAndroid(
                                     data.data.currentTime,
-                                    data.data.duration,
+                                    data.data.duration || 0,
                                     currentIsTv ? currentSeason : null,
                                     currentIsTv ? currentEpisode : null,
                                     'Vidcore'
@@ -788,6 +788,7 @@ object StreamProviderManager {
                             if (pd.currentTime !== undefined) {
                                 sendToAndroid(
                                     pd.currentTime,
+                                    pd.duration || 0,
                                     currentIsTv ? currentSeason : null,
                                     currentIsTv ? currentEpisode : null,
                                     'Peachify'
