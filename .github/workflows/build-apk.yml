@@ -30,7 +30,7 @@ jobs:
         run: |
           echo "TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}" >> local.properties
 
-      - name: Create dummy google-services.json
+- name: Create dummy google-services.json
         run: |
           cat > app/google-services.json << 'EOF'
           {
@@ -42,22 +42,25 @@ jobs:
             "client": [
               {
                 "client_info": {
-                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
                   "android_client_info": {
-                    "package_name": "com.kiduyu.tv"
+                    "package_name": "com.kiduyuk.klausk.kiduyutv.phone"
                   }
                 },
                 "oauth_client": [],
-                "api_key": [
-                  {
-                    "current_key": "dummy_api_key"
+                "api_key": [{"current_key": "dummy"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}}
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000002",
+                  "android_client_info": {
+                    "package_name": "com.kiduyuk.klausk.kiduyutv"
                   }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                }
+                },
+                "oauth_client": [],
+                "api_key": [{"current_key": "dummy"}],
+                "services": {"appinvite_service": {"other_platform_oauth_client": []}}
               }
             ],
             "configuration_version": "1"
