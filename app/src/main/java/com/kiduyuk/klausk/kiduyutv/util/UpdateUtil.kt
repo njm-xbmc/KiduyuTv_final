@@ -41,10 +41,10 @@ object UpdateUtil {
     private const val TAG = "UpdateUtil"
     
     // GitHub API endpoints
-    private const val GITHUB_RELEASES_API_URL = "https://api.github.com/repos/kiduyu-klaus/KiduyuTv_final/releases"
+    private const val GITHUB_RELEASES_API_URL = "https://api.github.com/repos/njm-xbmc/KiduyuTv_final/releases"
     
     // GitHub raw URL for version file (fallback)
-    private const val VERSION_URL = "https://raw.githubusercontent.com/kiduyu-klaus/KiduyuTv_final/refs/heads/main/VERSION"
+    private const val VERSION_URL = "https://raw.githubusercontent.com/njm-xbmc/KiduyuTv_final/refs/heads/main/VERSION"
     
     // Device type constants
     private const val DEVICE_TYPE_TV = "tv"
@@ -63,7 +63,7 @@ object UpdateUtil {
     suspend fun fetchLatestReleaseTitle(): String? = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
-                .url("https://api.github.com/repos/kiduyu-klaus/KiduyuTv_final/releases/latest")
+                .url("https://api.github.com/repos/njm-xbmc/KiduyuTv_final/releases/latest")
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "KiduyuTV-Android")
                 .build()
@@ -788,7 +788,7 @@ object UpdateUtil {
     suspend fun fetchLatestReleaseAnnotated(): AnnotatedString? = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
-                .url("https://api.github.com/repos/kiduyu-klaus/KiduyuTv_final/releases/latest")
+                .url("https://api.github.com/repos/njm-xbmc/KiduyuTv_final/releases/latest")
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "KiduyuTV-Android")
                 .build()
@@ -808,3 +808,4 @@ object UpdateUtil {
         }
     }
 }
+                  
