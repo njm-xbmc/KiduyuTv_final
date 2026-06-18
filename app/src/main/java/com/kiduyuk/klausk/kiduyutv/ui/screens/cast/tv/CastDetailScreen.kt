@@ -626,6 +626,8 @@ private fun BiographyDialog(
     biography: String,
     onDismiss: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             color = CardDark,
@@ -648,8 +650,9 @@ private fun BiographyDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(scrollState)
                         .padding(horizontal = 24.dp)
+                        .focusable()
                 ) {
                     Text(
                         text = biography,
