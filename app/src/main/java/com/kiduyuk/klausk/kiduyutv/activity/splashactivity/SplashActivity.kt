@@ -372,7 +372,7 @@ class SplashActivity : ComponentActivity() {
                 versionCheckHandled = true
                 // Open GitHub releases page
                 startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kiduyu-klaus/KiduyuTv_final/releases/latest"))
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/njm-xbmc/KiduyuTv_final/releases/latest"))
                 )
                 finish()
             }
@@ -539,7 +539,7 @@ class SplashActivity : ComponentActivity() {
                             startActivity(
                                 Intent(
                                     Intent.ACTION_VIEW,
-                                    "https://github.com/kiduyu-klaus/KiduyuTv_final/releases/latest".toUri()
+                                    "https://github.com/njm-xbmc/KiduyuTv_final/releases/latest".toUri()
                                 )
                             )
                         }
